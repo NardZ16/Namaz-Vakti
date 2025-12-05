@@ -4,40 +4,58 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- Ensuring iOS Platform Exists ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor ---');
 
   const iosFolderPath = 'ios';
   const xcodeProjPath = 'ios/App/App.xcodeproj';
 
-  // 1. Check if the Xcode project actually exists
-  // If the folder exists but the project is missing, it's broken.
+  // 1. ADIM: iOS Projesi Var mı Kontrol Et, Yoksa veya Bozuksa Sıfırdan Yarat
   if (!fs.existsSync(xcodeProjPath)) {
-    console.log('⚠️ Valid iOS project not found. Re-creating platform...');
+    console.log('⚠️ Geçerli bir iOS projesi bulunamadı veya eksik.');
     
-    // Clean up partial/broken folder if it exists
+    // Varsa bozuk klasörü sil
     if (fs.existsSync(iosFolderPath)) {
-        console.log('Removing broken ios folder...');
+        console.log('🧹 Bozuk iOS klasörü temizleniyor...');
         fs.rmSync(iosFolderPath, { recursive: true, force: true });
     }
 
     try {
-      // Create iOS platform from scratch
-      console.log('Running: npx cap add ios');
+      console.log('📦 iOS platformu sıfırdan oluşturuluyor (npx cap add ios)...');
       execSync('npx cap add ios', { stdio: 'inherit' });
-      console.log('✅ iOS platform added successfully.');
+      console.log('✅ iOS platformu başarıyla eklendi.');
     } catch (e) {
-      console.error('❌ Failed to add iOS platform:', e);
+      console.error('❌ iOS platformu eklenirken hata oluştu:', e);
       process.exit(1);
     }
   } else {
-    console.log('✅ iOS project found. Skipping creation.');
+    console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. Inject AdMob App ID into Info.plist
-  // This is crucial. If missing, the app crashes on launch.
+  // 2. ADIM: Podfile İçine Google SDK Sürümünü Sabitle (CRITICAL FIX)
+  // Bu adım "UMPConsentStatus" hatasını çözer. Google SDK v11 yerine v10 kullanılmasını zorlar.
+  const podfilePath = 'ios/App/Podfile';
+  if (fs.existsSync(podfilePath)) {
+      console.log('🔧 Podfile düzenleniyor (Google SDK v10.14.0 sürümüne sabitleniyor)...');
+      let podfileContent = fs.readFileSync(podfilePath, 'utf8');
+
+      // Eğer daha önce eklenmemişse ekle
+      if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
+          // 'target 'App' do' satırını bulup altına ekliyoruz
+          podfileContent = podfileContent.replace(
+              /target 'App' do/g, 
+              "target 'App' do\n  # FIX: AdMob Plugin v5 ile uyumluluk için Google SDK v10'a sabitlendi\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
+          );
+          fs.writeFileSync(podfilePath, podfileContent);
+          console.log('✅ Podfile güncellendi: Google SDK v10 kilitlendi.');
+      } else {
+          console.log('ℹ️ Podfile zaten yapılandırılmış.');
+      }
+  }
+
+  // 3. ADIM: Info.plist İçine AdMob ID Ekle (Uygulama Çökmesini Önler)
   const plistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(plistPath)) {
-    console.log('Injecting AdMob App ID into Info.plist...');
+    console.log('📝 Info.plist dosyasına AdMob ID ekleniyor...');
     let content = fs.readFileSync(plistPath, 'utf8');
 
     if (!content.includes('GADApplicationIdentifier')) {
@@ -196,23 +214,24 @@ async function main() {
         </dict>
     </array>`;
       
-      content = content.replace('</dict>', adMobEntry + '\n</dict>');
+      // Plist kapanış etiketinden hemen önce ekle
+      content = content.replace('</dict>\n</plist>', adMobEntry + '\n</dict>\n</plist>');
       fs.writeFileSync(plistPath, content);
-      console.log('✅ AdMob App ID injected successfully.');
+      console.log('✅ AdMob App ID Info.plist dosyasına eklendi.');
     } else {
-      console.log('AdMob ID already present.');
+      console.log('ℹ️ AdMob ID zaten ekli.');
     }
   } else {
-    console.warn('⚠️ Info.plist not found. AdMob might crash if not configured manually.');
+    console.warn('⚠️ Info.plist bulunamadı!');
   }
 
-  // 3. Force Sync to ensure plugins (AdMob) are installed in the native project
+  // 4. ADIM: Değişiklikleri Uygula (Sync)
   try {
-      console.log('Running: npx cap sync ios');
+      console.log('🔄 Capacitor senkronizasyonu yapılıyor (npx cap sync ios)...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
-      console.log('✅ Capacitor synced successfully.');
+      console.log('✅ Senkronizasyon tamamlandı.');
   } catch (e) {
-      console.error('❌ Failed to sync capacitor:', e);
+      console.error('❌ Sync hatası:', e);
   }
 }
 
