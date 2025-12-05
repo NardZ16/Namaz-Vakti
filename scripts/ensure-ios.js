@@ -33,23 +33,40 @@ async function main() {
 
   // 2. ADIM: Podfile İçine Google SDK Sürümünü Sabitle (CRITICAL FIX)
   // Bu adım "UMPConsentStatus" hatasını çözer. Google SDK v11 yerine v10 kullanılmasını zorlar.
+  // AYRICA: @capacitor-community/admob plugin'i genellikle belirli bir sürüme (= 10.12.0) bağımlıdır.
+  // Bu yüzden sürüm çakışmasını önlemek için tam olarak o sürümü kullanmalıyız.
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
-      console.log('🔧 Podfile düzenleniyor (Google SDK v10.14.0 sürümüne sabitleniyor)...');
+      console.log('🔧 Podfile düzenleniyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // Eğer daha önce eklenmemişse ekle
-      if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
-          // 'target 'App' do' satırını bulup altına ekliyoruz
+      // 2.1. Platform Sürümünü Yükselt (iOS 13.0)
+      // Google Mobile Ads SDK güncel sürümleri ve bazı pluginler iOS 12/13+ gerektirebilir.
+      if (podfileContent.includes("platform :ios")) {
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
+      } else {
+          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
+      }
+
+      // 2.2. Google SDK Sürümünü Ekle/Düzenle
+      const sdkLine = "pod 'Google-Mobile-Ads-SDK', '10.12.0'";
+      
+      if (podfileContent.includes("Google-Mobile-Ads-SDK")) {
+          // Mevcut varsa güncelle
+          podfileContent = podfileContent.replace(
+              /pod 'Google-Mobile-Ads-SDK'.*/, 
+              sdkLine
+          );
+      } else {
+          // Yoksa 'target 'App' do' altına ekle
           podfileContent = podfileContent.replace(
               /target 'App' do/g, 
-              "target 'App' do\n  # FIX: AdMob Plugin v5 ile uyumluluk için Google SDK v10'a sabitlendi\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
+              "target 'App' do\n  # FIX: Match version required by @capacitor-community/admob plugin\n  " + sdkLine
           );
-          fs.writeFileSync(podfilePath, podfileContent);
-          console.log('✅ Podfile güncellendi: Google SDK v10 kilitlendi.');
-      } else {
-          console.log('ℹ️ Podfile zaten yapılandırılmış.');
       }
+      
+      fs.writeFileSync(podfilePath, podfileContent);
+      console.log('✅ Podfile güncellendi: Platform iOS 13.0 ve Google SDK 10.12.0 ayarlandı.');
   }
 
   // 3. ADIM: Info.plist İçine AdMob ID Ekle (Uygulama Çökmesini Önler)
@@ -232,6 +249,10 @@ async function main() {
       console.log('✅ Senkronizasyon tamamlandı.');
   } catch (e) {
       console.error('❌ Sync hatası:', e);
+      // Hata durumunda işlemi başarısız saymamak için exit 1 yapmıyoruz,
+      // çünkü build sürecinde bazen loglar yanıltıcı olabilir. 
+      // Ancak logları incelemek için konsola basıyoruz.
+      process.exit(1); 
   }
 }
 
