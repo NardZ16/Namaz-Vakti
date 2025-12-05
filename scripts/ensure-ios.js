@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const { execSync } = require('child_process');
 
@@ -7,9 +8,6 @@ async function main() {
   console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor ---');
 
   // 0. ADIM: dist klasörü kontrolü (Capacitor Sync için gerekli)
-  // npm install sırasında build henüz çalışmadığı için dist klasörü olmayabilir.
-  // Bu durum npx cap sync komutunun hata vermesine neden olur.
-  // Geçici bir dist klasörü oluşturarak bu hatayı önlüyoruz.
   if (!fs.existsSync('dist')) {
     console.log('⚠️ dist klasörü bulunamadı. Sync hatasını önlemek için geçici olarak oluşturuluyor...');
     fs.mkdirSync('dist');
@@ -19,11 +17,10 @@ async function main() {
   const iosFolderPath = 'ios';
   const xcodeProjPath = 'ios/App/App.xcodeproj';
 
-  // 1. ADIM: iOS Projesi Var mı Kontrol Et, Yoksa veya Bozuksa Sıfırdan Yarat
+  // 1. ADIM: iOS Projesi Var mı Kontrol Et
   if (!fs.existsSync(xcodeProjPath)) {
     console.log('⚠️ Geçerli bir iOS projesi bulunamadı veya eksik.');
     
-    // Varsa bozuk klasörü sil
     if (fs.existsSync(iosFolderPath)) {
         console.log('🧹 Bozuk iOS klasörü temizleniyor...');
         fs.rmSync(iosFolderPath, { recursive: true, force: true });
@@ -41,45 +38,26 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile İçine Google SDK Sürümünü Sabitle (CRITICAL FIX)
-  // Bu adım "UMPConsentStatus" hatasını çözer. Google SDK v11 yerine v10 kullanılmasını zorlar.
-  // AYRICA: @capacitor-community/admob plugin'i genellikle belirli bir sürüme (= 10.12.0) bağımlıdır.
-  // Bu yüzden sürüm çakışmasını önlemek için tam olarak o sürümü kullanmalıyız.
+  // 2. ADIM: Podfile Platform Sürümünü Düzenle
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
       console.log('🔧 Podfile düzenleniyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
       // 2.1. Platform Sürümünü Yükselt (iOS 13.0)
-      // Google Mobile Ads SDK güncel sürümleri ve bazı pluginler iOS 12/13+ gerektirebilir.
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
           podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
+      
+      // Not: AdMob Plugin v6 kendi bağımlılıklarını yönetir, manuel sürüm sabitleme kaldırıldı.
 
-      // 2.2. Google SDK Sürümünü Ekle/Düzenle
-      const sdkLine = "pod 'Google-Mobile-Ads-SDK', '10.12.0'";
-      
-      if (podfileContent.includes("Google-Mobile-Ads-SDK")) {
-          // Mevcut varsa güncelle
-          podfileContent = podfileContent.replace(
-              /pod 'Google-Mobile-Ads-SDK'.*/, 
-              sdkLine
-          );
-      } else {
-          // Yoksa 'target 'App' do' altına ekle
-          podfileContent = podfileContent.replace(
-              /target 'App' do/g, 
-              "target 'App' do\n  # FIX: Match version required by @capacitor-community/admob plugin\n  " + sdkLine
-          );
-      }
-      
       fs.writeFileSync(podfilePath, podfileContent);
-      console.log('✅ Podfile güncellendi: Platform iOS 13.0 ve Google SDK 10.12.0 ayarlandı.');
+      console.log('✅ Podfile güncellendi: Platform iOS 13.0 ayarlandı.');
   }
 
-  // 3. ADIM: Info.plist İçine AdMob ID Ekle (Uygulama Çökmesini Önler)
+  // 3. ADIM: Info.plist İçine AdMob ID Ekle
   const plistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(plistPath)) {
     console.log('📝 Info.plist dosyasına AdMob ID ekleniyor...');
@@ -241,7 +219,6 @@ async function main() {
         </dict>
     </array>`;
       
-      // Plist kapanış etiketinden hemen önce ekle
       content = content.replace('</dict>\n</plist>', adMobEntry + '\n</dict>\n</plist>');
       fs.writeFileSync(plistPath, content);
       console.log('✅ AdMob App ID Info.plist dosyasına eklendi.');
@@ -252,16 +229,13 @@ async function main() {
     console.warn('⚠️ Info.plist bulunamadı!');
   }
 
-  // 4. ADIM: Değişiklikleri Uygula (Sync)
+  // 4. ADIM: Sync
   try {
       console.log('🔄 Capacitor senkronizasyonu yapılıyor (npx cap sync ios)...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
       console.log('✅ Senkronizasyon tamamlandı.');
   } catch (e) {
       console.error('❌ Sync hatası:', e);
-      // Hata durumunda işlemi başarısız saymamak için exit 1 yapmıyoruz,
-      // çünkü build sürecinde bazen loglar yanıltıcı olabilir. 
-      // Ancak logları incelemek için konsola basıyoruz.
       process.exit(1); 
   }
 }
