@@ -6,11 +6,23 @@ const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 async function main() {
   console.log('--- Ensuring iOS Platform Exists ---');
 
-  // 1. Check if ios folder exists
-  if (!fs.existsSync('ios')) {
-    console.log('iOS folder missing. Creating it now...');
+  const iosFolderPath = 'ios';
+  const xcodeProjPath = 'ios/App/App.xcodeproj';
+
+  // 1. Check if the Xcode project actually exists
+  // If the folder exists but the project is missing, it's broken.
+  if (!fs.existsSync(xcodeProjPath)) {
+    console.log('⚠️ Valid iOS project not found. Re-creating platform...');
+    
+    // Clean up partial/broken folder if it exists
+    if (fs.existsSync(iosFolderPath)) {
+        console.log('Removing broken ios folder...');
+        fs.rmSync(iosFolderPath, { recursive: true, force: true });
+    }
+
     try {
-      // Create iOS platform
+      // Create iOS platform from scratch
+      console.log('Running: npx cap add ios');
       execSync('npx cap add ios', { stdio: 'inherit' });
       console.log('✅ iOS platform added successfully.');
     } catch (e) {
@@ -18,7 +30,7 @@ async function main() {
       process.exit(1);
     }
   } else {
-    console.log('iOS folder already exists. Skipping creation.');
+    console.log('✅ iOS project found. Skipping creation.');
   }
 
   // 2. Inject AdMob App ID into Info.plist
@@ -192,6 +204,15 @@ async function main() {
     }
   } else {
     console.warn('⚠️ Info.plist not found. AdMob might crash if not configured manually.');
+  }
+
+  // 3. Force Sync to ensure plugins (AdMob) are installed in the native project
+  try {
+      console.log('Running: npx cap sync ios');
+      execSync('npx cap sync ios', { stdio: 'inherit' });
+      console.log('✅ Capacitor synced successfully.');
+  } catch (e) {
+      console.error('❌ Failed to sync capacitor:', e);
   }
 }
 
