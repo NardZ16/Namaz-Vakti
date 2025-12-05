@@ -1,0 +1,9 @@
+{
+  "name": "Copy of Namaz Vakti Pro",
+  "description": "Anlık konum bazlı, dinamik geri sayımlı ve günün ayeti özellikli modern namaz vakitleri uygulaması.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera",
+    "microphone"
+  ]
+}
