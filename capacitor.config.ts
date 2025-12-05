@@ -10,9 +10,8 @@ const config: CapacitorConfig = {
   },
   plugins: {
     AdMob: {
-      // OFFICIAL GOOGLE TEST APP ID (Safe for dev)
-      // Replace this with your REAL APP ID from AdMob Console (ca-app-pub-xxx~xxx) before publishing
-      appId: "ca-app-pub-3940256099942544~1458002511", 
+      // Real AdMob App ID
+      appId: "ca-app-pub-4319080566007267~6922736225", 
     }
   }
 };
