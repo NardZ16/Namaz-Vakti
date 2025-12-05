@@ -6,6 +6,16 @@ const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 async function main() {
   console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor ---');
 
+  // 0. ADIM: dist klasörü kontrolü (Capacitor Sync için gerekli)
+  // npm install sırasında build henüz çalışmadığı için dist klasörü olmayabilir.
+  // Bu durum npx cap sync komutunun hata vermesine neden olur.
+  // Geçici bir dist klasörü oluşturarak bu hatayı önlüyoruz.
+  if (!fs.existsSync('dist')) {
+    console.log('⚠️ dist klasörü bulunamadı. Sync hatasını önlemek için geçici olarak oluşturuluyor...');
+    fs.mkdirSync('dist');
+    fs.writeFileSync('dist/index.html', '<!DOCTYPE html><html><body>Placeholder</body></html>');
+  }
+
   const iosFolderPath = 'ios';
   const xcodeProjPath = 'ios/App/App.xcodeproj';
 
