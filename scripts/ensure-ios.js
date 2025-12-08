@@ -38,7 +38,7 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Platform Sürümünü Düzenle
+  // 2. ADIM: Podfile Düzenle (Versiyon Sabitleme)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
       console.log('🔧 Podfile düzenleniyor...');
@@ -50,11 +50,24 @@ async function main() {
       } else {
           podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
-      
-      // Not: AdMob Plugin v6 kendi bağımlılıklarını yönetir, manuel sürüm sabitleme kaldırıldı.
+
+      // 2.2. SDK Sürümlerini Sabitle (Plugin uyumluluğu için kritik)
+      // Plugin henüz Swift rename (UMP v2.1+) değişikliklerini desteklemiyor olabilir.
+      // Bu yüzden UMP 2.0.0 ve AdMob 10.14.0 sürümlerine sabitliyoruz.
+      const pinnedPods = `
+  # Force compatible versions for @capacitor-community/admob
+  pod 'Google-Mobile-Ads-SDK', '10.14.0'
+  pod 'GoogleUserMessagingPlatform', '2.0.0'
+`;
+
+      if (podfileContent.includes("target 'App' do")) {
+          if (!podfileContent.includes("GoogleUserMessagingPlatform")) {
+              podfileContent = podfileContent.replace("target 'App' do", "target 'App' do" + pinnedPods);
+          }
+      }
 
       fs.writeFileSync(podfilePath, podfileContent);
-      console.log('✅ Podfile güncellendi: Platform iOS 13.0 ayarlandı.');
+      console.log('✅ Podfile güncellendi: Platform iOS 13.0, AdMob 10.14.0, UMP 2.0.0');
   }
 
   // 3. ADIM: Info.plist İçine AdMob ID Ekle
