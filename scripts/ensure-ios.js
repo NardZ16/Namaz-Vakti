@@ -5,11 +5,11 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor (MacBook Fix - iOS 15+) ---');
 
-  // 0. ADIM: dist klasörü kontrolü (Capacitor Sync için gerekli)
+  // 0. ADIM: dist klasörü kontrolü (Capacitor Sync hatasını önlemek için)
   if (!fs.existsSync('dist')) {
-    console.log('⚠️ dist klasörü bulunamadı. Sync hatasını önlemek için geçici olarak oluşturuluyor...');
+    console.log('⚠️ dist klasörü bulunamadı. Geçici olarak oluşturuluyor...');
     fs.mkdirSync('dist');
     fs.writeFileSync('dist/index.html', '<!DOCTYPE html><html><body>Placeholder</body></html>');
   }
@@ -19,7 +19,7 @@ async function main() {
 
   // 1. ADIM: iOS Projesi Var mı Kontrol Et
   if (!fs.existsSync(xcodeProjPath)) {
-    console.log('⚠️ Geçerli bir iOS projesi bulunamadı veya eksik.');
+    console.log('⚠️ Geçerli bir iOS projesi bulunamadı.');
     
     if (fs.existsSync(iosFolderPath)) {
         console.log('🧹 Bozuk iOS klasörü temizleniyor...');
@@ -27,9 +27,9 @@ async function main() {
     }
 
     try {
-      console.log('📦 iOS platformu sıfırdan oluşturuluyor (npx cap add ios)...');
+      console.log('📦 iOS platformu oluşturuluyor (npx cap add ios)...');
       execSync('npx cap add ios', { stdio: 'inherit' });
-      console.log('✅ iOS platformu başarıyla eklendi.');
+      console.log('✅ iOS platformu eklendi.');
     } catch (e) {
       console.error('❌ iOS platformu eklenirken hata oluştu:', e);
       process.exit(1);
@@ -38,34 +38,65 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Düzenle
+  // 2. ADIM: Podfile Düzenlemesi (Versiyon Sabitleme - KRİTİK ADIM)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
       console.log('🔧 Podfile düzenleniyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // 2.1. Platform Sürümünü Yükselt (iOS 13.0)
-      // Google Mobile Ads SDK v10+ iOS 12+ gerektirir, garanti olsun diye 13.0 yapıyoruz.
+      // 2.1. Platform Sürümünü iOS 15.0 Yap (Daha güncel ve güvenli)
       if (podfileContent.includes("platform :ios")) {
-          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '15.0'");
       } else {
-          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
+          podfileContent = "platform :ios, '15.0'\n" + podfileContent;
       }
 
-      // NOT: AdMob Plugin v6 kullandığımız için manuel versiyon sabitlemeyi (pinning) kaldırdık.
-      // Plugin kendi podspec dosyasında uyumlu sürümleri zaten belirtiyor.
+      // 2.2. SDK Sürümlerini Sabitle (Renaming Hatası Çözümü)
+      // AdMob Plugin v6, Google'ın eski isimlendirmelerini kullandığı için
+      // SDK'ları bu plugin ile uyumlu versiyonlara sabitliyoruz.
+      // Google-Mobile-Ads-SDK -> 10.14.0
+      // GoogleUserMessagingPlatform -> 2.0.0
+      
+      const fixedPods = `
+  pod 'Google-Mobile-Ads-SDK', '10.14.0'
+  pod 'GoogleUserMessagingPlatform', '2.0.0'
+      `;
+
+      // Eğer henüz eklenmemişse ekle
+      if (!podfileContent.includes("GoogleUserMessagingPlatform")) {
+          // target 'App' do satırının hemen altına ekle
+          podfileContent = podfileContent.replace(
+              /target 'App' do/g,
+              `target 'App' do${fixedPods}`
+          );
+          
+          console.log('🔒 Google SDK versiyonları Podfile içine sabitlendi (Fix: UMP Renaming).');
+
+          // Podfile değiştiği için eski cache'i temizle ki yeni versiyonları indirmesin
+          console.log('🧹 Temiz kurulum için Podfile.lock ve Pods klasörü temizleniyor...');
+          const lockFile = 'ios/App/Podfile.lock';
+          const podsDir = 'ios/App/Pods';
+          if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
+          if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
+      } else {
+          // Eğer zaten ekliyse ama platform değiştiyse yine temizlik yapalım
+          console.log('🧹 Platform değişikliği nedeniyle Pods temizleniyor...');
+          const lockFile = 'ios/App/Podfile.lock';
+          const podsDir = 'ios/App/Pods';
+          if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
+          if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
+      }
       
       fs.writeFileSync(podfilePath, podfileContent);
-      console.log('✅ Podfile güncellendi: Platform iOS 13.0 ayarlandı.');
   }
 
   // 3. ADIM: Info.plist İçine AdMob ID Ekle
   const plistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(plistPath)) {
-    console.log('📝 Info.plist dosyasına AdMob ID ekleniyor...');
     let content = fs.readFileSync(plistPath, 'utf8');
 
     if (!content.includes('GADApplicationIdentifier')) {
+      console.log('📝 Info.plist dosyasına AdMob ID ekleniyor...');
       const adMobEntry = `
     <key>GADApplicationIdentifier</key>
     <string>${ADMOB_APP_ID}</string>
@@ -223,19 +254,15 @@ async function main() {
       
       content = content.replace('</dict>\n</plist>', adMobEntry + '\n</dict>\n</plist>');
       fs.writeFileSync(plistPath, content);
-      console.log('✅ AdMob App ID Info.plist dosyasına eklendi.');
-    } else {
-      console.log('ℹ️ AdMob ID zaten ekli.');
     }
-  } else {
-    console.warn('⚠️ Info.plist bulunamadı!');
   }
 
-  // 4. ADIM: Sync
+  // 4. ADIM: Sync ve Pod Install
   try {
-      console.log('🔄 Capacitor senkronizasyonu yapılıyor (npx cap sync ios)...');
+      console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
+      // Sync komutu Podfile'ı okur ve pod install işlemini de yapar.
       execSync('npx cap sync ios', { stdio: 'inherit' });
-      console.log('✅ Senkronizasyon tamamlandı.');
+      console.log('✅ Kurulum başarıyla tamamlandı.');
   } catch (e) {
       console.error('❌ Sync hatası:', e);
       process.exit(1); 
