@@ -45,47 +45,38 @@ async function main() {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
       // 2.1. Platform Sürümünü iOS 15.0 Yap (Daha güncel ve güvenli)
+      // Google Ads SDK v11+ iOS 12+ gerektirir, güvenli taraf için 15.0 yapıyoruz.
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '15.0'");
       } else {
           podfileContent = "platform :ios, '15.0'\n" + podfileContent;
       }
 
-      // 2.2. SDK Sürümlerini Sabitle (Renaming Hatası Çözümü)
-      // AdMob Plugin v6, Google'ın eski isimlendirmelerini kullandığı için
-      // SDK'ları bu plugin ile uyumlu versiyonlara sabitliyoruz.
-      // Google-Mobile-Ads-SDK -> 10.14.0
-      // GoogleUserMessagingPlatform -> 2.0.0
-      
+      // NOT: AdMob Plugin v6.2.0 artık Google-Mobile-Ads-SDK 11.3.0 sürümünü zorunlu kılıyor.
+      // Bu yüzden manuel versiyon sabitlemeyi (10.14.0) KALDIRIYORUZ.
+      // Plugin'in kendi bağımlılıklarını yönetmesine izin veriyoruz.
+
+      /* 
+      // ESKİ KOD (ARTIK GEREKSİZ):
       const fixedPods = `
-  pod 'Google-Mobile-Ads-SDK', '10.14.0'
-  pod 'GoogleUserMessagingPlatform', '2.0.0'
+        pod 'Google-Mobile-Ads-SDK', '10.14.0'
+        pod 'GoogleUserMessagingPlatform', '2.0.0'
       `;
+      */
 
-      // Eğer henüz eklenmemişse ekle
-      if (!podfileContent.includes("GoogleUserMessagingPlatform")) {
-          // target 'App' do satırının hemen altına ekle
-          podfileContent = podfileContent.replace(
-              /target 'App' do/g,
-              `target 'App' do${fixedPods}`
-          );
-          
-          console.log('🔒 Google SDK versiyonları Podfile içine sabitlendi (Fix: UMP Renaming).');
-
-          // Podfile değiştiği için eski cache'i temizle ki yeni versiyonları indirmesin
-          console.log('🧹 Temiz kurulum için Podfile.lock ve Pods klasörü temizleniyor...');
-          const lockFile = 'ios/App/Podfile.lock';
-          const podsDir = 'ios/App/Pods';
-          if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
-          if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
-      } else {
-          // Eğer zaten ekliyse ama platform değiştiyse yine temizlik yapalım
-          console.log('🧹 Platform değişikliği nedeniyle Pods temizleniyor...');
-          const lockFile = 'ios/App/Podfile.lock';
-          const podsDir = 'ios/App/Pods';
-          if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
-          if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
+      // Eğer Podfile daha önce modifiye edildiyse eski satırları temizleyelim (Clean up)
+      if (podfileContent.includes("pod 'Google-Mobile-Ads-SDK', '10.14.0'")) {
+         podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK', '10.14.0'/g, "");
+         podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform', '2.0.0'/g, "");
+         console.log('🔓 Manuel SDK sabitlemeleri kaldırıldı (Plugin v6.2.0 uyumu için).');
       }
+
+      // Her zaman temiz bir pod kurulumu için lock ve pods silinir
+      console.log('🧹 Temiz kurulum için Podfile.lock ve Pods klasörü temizleniyor...');
+      const lockFile = 'ios/App/Podfile.lock';
+      const podsDir = 'ios/App/Pods';
+      if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
+      if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
       
       fs.writeFileSync(podfilePath, podfileContent);
   }
