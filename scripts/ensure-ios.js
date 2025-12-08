@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması (v6.2.0 Auto-Resolve) ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması (SDK v10 Fix) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -38,22 +38,39 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Düzenleme (Platform 15.0 Ayarı)
+  // 2. ADIM: Podfile Düzenleme (SDK v10.14.0 Sabitleme)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
-      console.log('🔧 Podfile: Platform iOS 15.0 olarak ayarlanıyor (SDK v11 için gerekli)...');
+      console.log('🔧 Podfile: Google SDK v10.14.0 ve UMP v2.1.0 sabitleniyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // Platform iOS 15.0 (Google Mobile Ads SDK v11+ için minimum gereksinim genellikle iOS 12/13, 15 güvenlidir)
+      // Platform iOS 13.0 (v10 SDK için yeterli ve güvenli)
       if (podfileContent.includes("platform :ios")) {
-          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '15.0'");
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
-          podfileContent = "platform :ios, '15.0'\n" + podfileContent;
+          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
 
-      // Varsa eski manuel tanımları temizliyoruz ki plugin kendi dependency'sini kullansın
+      // Varsa eski tanımları temizle
       podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK'.*\n/g, '');
       podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform'.*\n/g, '');
+
+      // İstenen SDK sürümlerini target 'App' bloğunun içine veya dosya sonuna ekle
+      // Capacitor projelerinde genellikle 'def capacitor_pods' kullanılır ama
+      // en garantisi dosyanın sonuna (target bloğunun içine denk gelecek şekilde) eklemektir.
+      // Ancak regex ile target bloğunu bulup içine eklemek daha güvenli.
+      
+      const podsToInject = `
+  # FIX: Force Google Mobile Ads SDK v10 for AdMob Plugin Compatibility
+  pod 'Google-Mobile-Ads-SDK', '10.14.0'
+  pod 'GoogleUserMessagingPlatform', '2.1.0'
+`;
+
+      if (podfileContent.includes('target \'App\' do')) {
+          podfileContent = podfileContent.replace('target \'App\' do', 'target \'App\' do' + podsToInject);
+      } else {
+          podfileContent += podsToInject;
+      }
 
       fs.writeFileSync(podfilePath, podfileContent);
 
