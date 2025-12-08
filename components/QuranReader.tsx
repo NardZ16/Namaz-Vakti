@@ -285,7 +285,7 @@ const QuranReader: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 pb-44">
+            <div className="flex-1 overflow-y-auto p-2 pb-24">
                 {surahs.length === 0 ? (
                     <div className="flex items-center justify-center h-40">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
@@ -367,7 +367,7 @@ const QuranReader: React.FC = () => {
         </div>
 
         {/* Content - COMPACT FLOW READING MODE */}
-        <div className="flex-1 overflow-y-auto pb-44 scroll-smooth bg-[#fdfbf7] dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto pb-24 scroll-smooth bg-[#fdfbf7] dark:bg-slate-950">
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-64 space-y-4">
                     <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>

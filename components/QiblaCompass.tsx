@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { triggerHaptic } from '../services/nativeService';
 
@@ -168,7 +169,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
   const userRugRotation = heading - qiblaAngle;
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-4 pb-36 bg-[#f5f2eb] dark:bg-slate-900 relative overflow-hidden">
+    <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-slate-900 relative overflow-hidden">
       
       <div 
         className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-700 pointer-events-none ${isAligned ? 'opacity-100' : 'opacity-0'}`}

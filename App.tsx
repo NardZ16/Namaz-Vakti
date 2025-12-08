@@ -16,7 +16,6 @@ import NotificationSettings from './components/NotificationSettings';
 import QiblaCompass from './components/QiblaCompass';
 import Zikirmatik from './components/Zikirmatik';
 import QuranReader from './components/QuranReader';
-import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
 
 const PRAYER_MAP: Record<string, string> = {
@@ -491,22 +490,8 @@ const App: React.FC = () => {
         </header>
       )}
 
-      <main className="relative z-10 pt-24 pb-44 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-6">
+      <main className="relative z-10 pt-24 pb-24 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-6">
         
-        {/* TOP AD: Show only on Web (Not activeTool). Hide on Native to prevent scroll issues. */}
-        {!activeTool && (
-           <div className="w-full flex justify-center mb-2">
-              <div className="bg-[#fdfbf7] dark:bg-[#1e293b] rounded-2xl shadow-md border border-amber-100 dark:border-slate-700 p-0.5 overflow-hidden w-[320px] h-[52px] flex items-center justify-center min-h-[52px]">
-                  <GoogleAd 
-                    slotId="6421239004" 
-                    style={{ width: '320px', height: '50px' }}
-                    className="w-full h-full"
-                    format="horizontal" 
-                  />
-              </div>
-           </div>
-        )}
-
         {error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
             <span className="block sm:inline">{error}</span>
@@ -549,18 +534,7 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* BOTTOM AD: Web Only via GoogleAd. Native handles this via AppLovin Plugin Overlay */}
-      <div className="fixed bottom-0 left-0 right-0 z-[60] flex justify-center items-end pointer-events-none bg-transparent h-[auto] px-1 pb-[env(safe-area-inset-bottom)]">
-          <GoogleAd 
-            slotId="2441755104" 
-            format={null} 
-            style={{ width: '100%', height: '50px', maxWidth: '100%' }}
-            className="w-full max-w-screen-xl mx-auto shadow-sm rounded-t-lg pointer-events-auto bg-gray-50 dark:bg-gray-800"
-          />
-      </div>
-
-
-      <div className="fixed bottom-[65px] left-0 right-0 z-50 flex justify-center mb-0 pointer-events-none pb-[env(safe-area-inset-bottom)]">
+      <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center mb-0 pointer-events-none pb-[env(safe-area-inset-bottom)]">
          <nav className="bg-white/90 dark:bg-[#1e293b]/90 backdrop-blur-lg border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-[90%] max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01]">
             <button 
                 onClick={() => setActiveTool(null)}

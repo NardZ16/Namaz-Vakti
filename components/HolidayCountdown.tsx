@@ -95,7 +95,7 @@ const HolidayCountdown: React.FC = () => {
   );
 
   return (
-    <div className="h-full overflow-y-auto p-4 pb-44 scroll-smooth">
+    <div className="h-full overflow-y-auto p-4 pb-24 scroll-smooth">
       <div className="max-w-md mx-auto">
         
         {/* Header Section */}

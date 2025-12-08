@@ -68,7 +68,7 @@ const NotificationSettings: React.FC = () => {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4 pb-44">
+    <div className="h-full overflow-y-auto p-4 pb-24">
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Bildirim Ayarları</h2>
       <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Vakitlerden önce bildirim ve ses alın.</p>
 

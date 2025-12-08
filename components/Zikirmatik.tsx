@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { triggerHaptic } from '../services/nativeService';
 
@@ -44,7 +45,7 @@ const Zikirmatik: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-4 pb-36 bg-[#f5f2eb] dark:bg-slate-900/50">
+    <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-slate-900/50">
       
       <div className="bg-[#fdfbf7] dark:bg-slate-800 rounded-[3rem] shadow-2xl p-6 w-72 h-[30rem] flex flex-col items-center justify-between border-8 border-gray-200 dark:border-slate-600 relative">
         

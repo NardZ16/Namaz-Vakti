@@ -9,10 +9,7 @@ const config: CapacitorConfig = {
     androidScheme: 'https'
   },
   plugins: {
-    AdMob: {
-      // Real AdMob App ID
-      appId: "ca-app-pub-4319080566007267~6922736225", 
-    }
+    // AdMob removed
   }
 };
 
