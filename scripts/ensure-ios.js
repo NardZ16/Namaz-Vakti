@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor (MacBook Fix - iOS 15+) ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor (Fixed SDK Pinning) ---');
 
   // 0. ADIM: dist klasörü kontrolü (Capacitor Sync hatasını önlemek için)
   if (!fs.existsSync('dist')) {
@@ -38,37 +38,41 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Düzenlemesi (Versiyon Sabitleme - KRİTİK ADIM)
+  // 2. ADIM: Podfile Düzenlemesi ve SDK Sabitleme
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
-      console.log('🔧 Podfile düzenleniyor...');
+      console.log('🔧 Podfile düzenleniyor ve SDK sürümleri sabitleniyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // 2.1. Platform Sürümünü iOS 15.0 Yap (Daha güncel ve güvenli)
-      // Google Ads SDK v11+ iOS 12+ gerektirir, güvenli taraf için 15.0 yapıyoruz.
+      // 2.1. Platform Sürümünü iOS 13.0+ Yap (AdMob 10.x için yeterli ve güvenli)
+      // 15.0 yaparsak bazı eski eklentiler sorun çıkarabilir, 13.0 ideal.
       if (podfileContent.includes("platform :ios")) {
-          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '15.0'");
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
-          podfileContent = "platform :ios, '15.0'\n" + podfileContent;
+          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
 
-      // NOT: AdMob Plugin v6.2.0 artık Google-Mobile-Ads-SDK 11.3.0 sürümünü zorunlu kılıyor.
-      // Bu yüzden manuel versiyon sabitlemeyi (10.14.0) KALDIRIYORUZ.
-      // Plugin'in kendi bağımlılıklarını yönetmesine izin veriyoruz.
-
-      /* 
-      // ESKİ KOD (ARTIK GEREKSİZ):
+      // 2.2. SDK Sabitleme (Derleme Hatalarını Önlemek İçin)
+      // Bu satırlar Podfile'ın en üstüne eklenerek versiyonları kilitler.
       const fixedPods = `
-        pod 'Google-Mobile-Ads-SDK', '10.14.0'
-        pod 'GoogleUserMessagingPlatform', '2.0.0'
-      `;
-      */
+# Fix for UMPConsentStatus renamed to ConsentStatus
+# We must use older SDKs that match the Plugin's code
+def cap_pods_fix
+  pod 'Google-Mobile-Ads-SDK', '10.14.0'
+  pod 'GoogleUserMessagingPlatform', '2.0.0'
+end
+`;
+      
+      // 'def capacitor_pods' satırından önce ekliyoruz ki yüklenirken bu versiyonları baz alsın
+      // veya dosyanın sonuna target içine ekleyebiliriz. En garantisi target 'App' içine eklemek.
+      
+      // Mevcut içeriği temizle (tekrar tekrar eklememek için)
+      podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK'.*\n/g, '');
+      podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform'.*\n/g, '');
 
-      // Eğer Podfile daha önce modifiye edildiyse eski satırları temizleyelim (Clean up)
-      if (podfileContent.includes("pod 'Google-Mobile-Ads-SDK', '10.14.0'")) {
-         podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK', '10.14.0'/g, "");
-         podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform', '2.0.0'/g, "");
-         console.log('🔓 Manuel SDK sabitlemeleri kaldırıldı (Plugin v6.2.0 uyumu için).');
+      // Target bloğunun içine enjekte et
+      if (podfileContent.includes("target 'App' do")) {
+         podfileContent = podfileContent.replace("target 'App' do", "target 'App' do\n  pod 'Google-Mobile-Ads-SDK', '10.14.0'\n  pod 'GoogleUserMessagingPlatform', '2.0.0'");
       }
 
       // Her zaman temiz bir pod kurulumu için lock ve pods silinir
@@ -251,7 +255,6 @@ async function main() {
   // 4. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
-      // Sync komutu Podfile'ı okur ve pod install işlemini de yapar.
       execSync('npx cap sync ios', { stdio: 'inherit' });
       console.log('✅ Kurulum başarıyla tamamlandı.');
   } catch (e) {
