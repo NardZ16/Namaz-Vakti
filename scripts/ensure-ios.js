@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması (Stable v5 Stack) ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması (v6.2.0 Auto-Resolve) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -38,37 +38,22 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Düzenleme (SDK Sabitleme)
+  // 2. ADIM: Podfile Düzenleme (Platform 15.0 Ayarı)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
-      console.log('🔧 Podfile: Sürümler sabitleniyor (Ads 10.14.0, UMP 2.0.0)...');
+      console.log('🔧 Podfile: Platform iOS 15.0 olarak ayarlanıyor (SDK v11 için gerekli)...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // Platform iOS 13.0
+      // Platform iOS 15.0 (Google Mobile Ads SDK v11+ için minimum gereksinim genellikle iOS 12/13, 15 güvenlidir)
       if (podfileContent.includes("platform :ios")) {
-          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '15.0'");
       } else {
-          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
+          podfileContent = "platform :ios, '15.0'\n" + podfileContent;
       }
 
-      // Varsa eski tanımları temizle
+      // Varsa eski manuel tanımları temizliyoruz ki plugin kendi dependency'sini kullansın
       podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK'.*\n/g, '');
       podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform'.*\n/g, '');
-
-      // Kesin sürüm sabitleme (AdMob v5.3.2 ile tam uyumlu versiyonlar)
-      const fixedPods = `
-  # KESİN ÇÖZÜM İÇİN SABİTLENMİŞ SÜRÜMLER
-  pod 'Google-Mobile-Ads-SDK', '10.14.0'
-  pod 'GoogleUserMessagingPlatform', '2.0.0'
-      `;
-
-      // 'def capacitor_pods' satırından hemen sonraya ekle
-      if (podfileContent.includes("def capacitor_pods")) {
-          podfileContent = podfileContent.replace("def capacitor_pods", "def capacitor_pods" + fixedPods);
-      } else {
-          // Fallback: dosya sonuna ekle
-          podfileContent += fixedPods;
-      }
 
       fs.writeFileSync(podfilePath, podfileContent);
 
@@ -250,6 +235,7 @@ async function main() {
   // 4. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
+      // npx cap sync ios komutu hem copy, hem update hem de pod install yapar.
       execSync('npx cap sync ios', { stdio: 'inherit' });
       console.log('✅ Kurulum başarıyla tamamlandı.');
   } catch (e) {
