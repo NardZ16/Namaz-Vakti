@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 const ADMOB_APP_ID = "ca-app-pub-4319080566007267~6922736225";
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması Başlatılıyor (Clean & Auto-Resolve) ---');
+  console.log('--- 🛠️ iOS Ortamı ve AdMob Yapılandırması (Stable v5 Stack) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -38,27 +38,39 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Platform Ayarı (SDK 11+ için iOS 13.0 şart)
+  // 2. ADIM: Podfile Düzenleme (SDK Sabitleme)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
-      console.log('🔧 Podfile: Platform iOS 13.0 olarak ayarlanıyor...');
+      console.log('🔧 Podfile: Sürümler sabitleniyor (Ads 10.14.0, UMP 2.0.0)...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // Platform Sürümünü iOS 13.0 yap (Google Ads SDK 11.x uyumluluğu için)
+      // Platform iOS 13.0
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
           podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
 
-      // ÖNEMLİ: Daha önceki manuel sabitleme kodlarını siliyoruz.
-      // Plugin v6.0.0, kendi podspec dosyasında uyumlu SDK sürümünü zaten belirtiyor.
-      // Manuel müdahale çakışma yaratır.
-      
-      console.log('🧹 Podfile temizleniyor (Eski sabitlemeler kaldırılıyor)...');
-      podfileContent = podfileContent.replace(/# Fix for UMPConsentStatus[\s\S]*?end\n/g, '');
+      // Varsa eski tanımları temizle
       podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK'.*\n/g, '');
       podfileContent = podfileContent.replace(/pod 'GoogleUserMessagingPlatform'.*\n/g, '');
+
+      // Kesin sürüm sabitleme (AdMob v5.3.2 ile tam uyumlu versiyonlar)
+      const fixedPods = `
+  # KESİN ÇÖZÜM İÇİN SABİTLENMİŞ SÜRÜMLER
+  pod 'Google-Mobile-Ads-SDK', '10.14.0'
+  pod 'GoogleUserMessagingPlatform', '2.0.0'
+      `;
+
+      // 'def capacitor_pods' satırından hemen sonraya ekle
+      if (podfileContent.includes("def capacitor_pods")) {
+          podfileContent = podfileContent.replace("def capacitor_pods", "def capacitor_pods" + fixedPods);
+      } else {
+          // Fallback: dosya sonuna ekle
+          podfileContent += fixedPods;
+      }
+
+      fs.writeFileSync(podfilePath, podfileContent);
 
       // Temiz kurulum için lock ve pods silinir
       console.log('🧹 Önbellek temizleniyor (Podfile.lock ve Pods)...');
@@ -66,8 +78,6 @@ async function main() {
       const podsDir = 'ios/App/Pods';
       if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
       if (fs.existsSync(podsDir)) fs.rmSync(podsDir, { recursive: true, force: true });
-      
-      fs.writeFileSync(podfilePath, podfileContent);
   }
 
   // 3. ADIM: Info.plist İçine AdMob ID Ekle
@@ -75,7 +85,6 @@ async function main() {
   if (fs.existsSync(plistPath)) {
     let content = fs.readFileSync(plistPath, 'utf8');
 
-    // Mükerrer eklemeyi önle
     if (!content.includes('GADApplicationIdentifier')) {
       console.log('📝 Info.plist dosyasına AdMob ID ekleniyor...');
       const adMobEntry = `
@@ -241,8 +250,6 @@ async function main() {
   // 4. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
-      // Sync işlemi otomatik olarak 'pod install' da çalıştırır.
-      // Eklenti v6.0.0 kendi dependency'sini (SDK v11+) çekecek ve uyumlu olacaktır.
       execSync('npx cap sync ios', { stdio: 'inherit' });
       console.log('✅ Kurulum başarıyla tamamlandı.');
   } catch (e) {
