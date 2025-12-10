@@ -1,9 +1,10 @@
 
 const fs = require('fs');
 const { execSync } = require('child_process');
+const path = require('path');
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Reklamsız & Konum İzinli & Auto-Compliance & Auto-Version) ---');
+  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Local Fix) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -32,8 +33,6 @@ async function main() {
       console.error('❌ iOS platformu eklenirken hata oluştu:', e);
       process.exit(1);
     }
-  } else {
-    console.log('✅ iOS projesi mevcut.');
   }
 
   // 2. ADIM: Info.plist Düzenleme (Konum, Şifreleme ve Build Numarası)
@@ -53,7 +52,7 @@ async function main() {
           plistContent = plistContent.replace('<dict>', '<dict>' + locationPermissions);
       }
 
-      // Şifreleme Uyumluluğu (Missing Compliance uyarısını atlamak için)
+      // Şifreleme Uyumluluğu
       if (!plistContent.includes('ITSAppUsesNonExemptEncryption')) {
           const encryptionKey = `
     <key>ITSAppUsesNonExemptEncryption</key>
@@ -62,8 +61,7 @@ async function main() {
           plistContent = plistContent.replace('<dict>', '<dict>' + encryptionKey);
       }
 
-      // 🔄 OTO BUILD NUMARASI GÜNCELLEME (TestFlight için ŞART)
-      // Format: YYYYMMDDHHmm (Örn: 202512081430)
+      // 🔄 OTO BUILD NUMARASI GÜNCELLEME
       const now = new Date();
       const buildNumber = now.getFullYear().toString() +
                           (now.getMonth() + 1).toString().padStart(2, '0') +
@@ -73,15 +71,10 @@ async function main() {
 
       console.log(`🔢 Build Numarası Güncelleniyor: ${buildNumber}`);
 
-      // CFBundleVersion değerini bul ve değiştir
-      // Regex: <key>CFBundleVersion</key> (boşluk/yeni satır) <string>ESKI_NO</string>
       const buildVerRegex = /(<key>CFBundleVersion<\/key>[\s\r\n]*<string>)([^<]+)(<\/string>)/;
-      
       if (buildVerRegex.test(plistContent)) {
           plistContent = plistContent.replace(buildVerRegex, `$1${buildNumber}$3`);
       } else {
-          // Eğer regex bulamazsa (nadir), manuel eklemeyi dene veya uyar
-          console.warn("⚠️ CFBundleVersion bulunamadı, manuel ekleniyor...");
           plistContent = plistContent.replace('<dict>', `<dict>
     <key>CFBundleVersion</key>
     <string>${buildNumber}</string>`);
@@ -96,7 +89,6 @@ async function main() {
       console.log('🔧 Podfile: Platform iOS 13.0 ayarlanıyor...');
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-      // Platform iOS 13.0
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
@@ -106,22 +98,7 @@ async function main() {
       fs.writeFileSync(podfilePath, podfileContent);
   }
 
-  // 4. ADIM: İkon ve Splash Oluşturma (Appflow Ortamında Çalışır)
-  // Windows hatasını önlemek için işlemi burada yapıyoruz.
-  if (fs.existsSync('assets/icon.png')) {
-      console.log('🎨 İkonlar oluşturuluyor (Appflow)...');
-      try {
-          // --ios bayrağı ile sadece iOS için üretim yapar, Windows hatasını bypass eder
-          execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
-          console.log('✅ İkonlar başarıyla güncellendi.');
-      } catch (e) {
-          console.warn('⚠️ İkon oluşturulurken bir uyarı alındı (Kritik olmayabilir):', e.message);
-      }
-  } else {
-      console.log('ℹ️ assets/icon.png bulunamadı, varsayılan ikon kullanılacak.');
-  }
-
-  // 5. ADIM: Sync ve Pod Install
+  // 4. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
@@ -129,6 +106,56 @@ async function main() {
   } catch (e) {
       console.error('❌ Sync hatası:', e);
       process.exit(1); 
+  }
+
+  // 5. ADIM: İKON İŞLEMLERİ (Sadece Yerel Dosya)
+  const iconPath = 'assets/icon.png';
+  
+  if (fs.existsSync(iconPath)) {
+      console.log('🎨 İkon dosyanız bulundu. İşleniyor...');
+      
+      try {
+          // Sharp'ı yükle
+          console.log('📦 Görüntü işleme aracı (sharp) yükleniyor...');
+          execSync('npm install sharp --no-save', { stdio: 'inherit' });
+
+          // Sharp modülünü dinamik olarak çağır
+          const sharpPath = path.resolve('./node_modules/sharp');
+          const sharp = require(sharpPath);
+
+          // RESİM ONARMA: Dosyayı oku ve zorla PNG olarak yeniden kaydet.
+          // Bu adım, uzantısı .png olup içeriği bozuk/farklı olan dosyaları düzeltir.
+          console.log('🛠️ İkon dosyası doğrulanıyor ve onarılıyor...');
+          const tempBuffer = fs.readFileSync(iconPath);
+          
+          await sharp(tempBuffer)
+            .resize(1024, 1024, { fit: 'cover' }) // Boyutu garanti et
+            .png() // Zorla PNG yap
+            .toFile('assets/icon_fixed.png'); // Geçici dosyaya yaz
+
+          // Orijinal dosyanın yerine fixed dosyayı koy
+          fs.renameSync('assets/icon_fixed.png', iconPath);
+          console.log('✅ İkon dosyası onarıldı ve 1024x1024 PNG formatına çevrildi.');
+
+          // Eski iOS ikonlarını sil (Temiz başlangıç)
+          const appIconSetPath = 'ios/App/App/Assets.xcassets/AppIcon.appiconset';
+          if (fs.existsSync(appIconSetPath)) {
+              console.log('🧹 Eski AppIcon seti temizleniyor...');
+              fs.rmSync(appIconSetPath, { recursive: true, force: true });
+          }
+
+          // Capacitor Assets'i çalıştır
+          console.log('🚀 İkonlar üretiliyor...');
+          execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
+          console.log('✅ İkon süreci tamamlandı.');
+
+      } catch (e) {
+          console.error('⚠️ İkon oluşturma hatası:', e.message);
+          console.error('Lütfen "assets/icon.png" dosyanızın geçerli bir resim olduğundan emin olun.');
+      }
+  } else {
+      console.log('⚠️ UYARI: "assets/icon.png" dosyası bulunamadı!');
+      console.log('ℹ️ Varsayılan Capacitor ikonu kullanılacak. Kendi ikonunuzu eklemek için assets klasörüne icon.png yükleyin.');
   }
 }
 
