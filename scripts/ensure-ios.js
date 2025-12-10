@@ -3,7 +3,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 async function main() {
-  console.log('--- 🍎 iOS Build & Icon Fixer Started ---');
+  console.log('--- 🍎 iOS Build & Icon Fixer Started (JPG Support) ---');
 
   // 1. SETUP & CLEANUP
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -12,18 +12,24 @@ async function main() {
     fs.writeFileSync('dist/index.html', '<html><body>Placeholder</body></html>');
   }
   
-  // Detect Icon Source
-  const candidates = ['icon.png', 'logo.png', 'assets/icon.png', 'assets/logo.png'];
-  let sourceIcon = candidates.find(f => fs.existsSync(f));
+  // Detect Icon Source (Added JPG/JPEG support)
+  const candidates = [
+      'icon.png', 'icon.jpg', 'icon.jpeg',
+      'logo.png', 'logo.jpg', 'logo.jpeg',
+      'assets/icon.png', 'assets/icon.jpg', 'assets/icon.jpeg',
+      'assets/logo.png', 'assets/logo.jpg', 'assets/logo.jpeg'
+  ];
   
-  if (!sourceIcon) {
-    console.log('⚠️ No icon found. Creating default logo.png...');
-    const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect width="1024" height="1024" fill="#0f766e"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="500" fill="white">N</text></svg>`;
-    fs.writeFileSync('assets/logo.png', svg);
-    sourceIcon = 'assets/logo.png';
+  let sourceIcon = null;
+  for (const c of candidates) {
+      if (fs.existsSync(c)) {
+          sourceIcon = c;
+          console.log(`📦 Found source icon: ${c}`);
+          break;
+      }
   }
-
-  // Install Sharp if needed
+  
+  // Install Sharp if needed (Critical for conversion)
   let sharp;
   try {
     sharp = require('sharp');
@@ -33,8 +39,16 @@ async function main() {
       execSync('npm install sharp --no-save', { stdio: 'ignore' });
       sharp = require('sharp');
     } catch (err) {
-      console.warn('⚠️ Sharp install failed. Icons will be copied without resizing.');
+      console.warn('⚠️ Sharp install failed.');
     }
+  }
+
+  // If no icon or sharp missing, create/use default SVG
+  if (!sourceIcon) {
+    console.log('⚠️ No icon found. Creating default logo.png...');
+    const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect width="1024" height="1024" fill="#0f766e"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="500" fill="white">N</text></svg>`;
+    fs.writeFileSync('assets/logo.png', svg);
+    sourceIcon = 'assets/logo.png';
   }
 
   // 2. IOS PLATFORM CHECK (Fix Zombie Folder)
@@ -52,6 +66,8 @@ async function main() {
   // 3. GENERATE ICONS MANUALLY
   console.log('🎨 Generating iOS Icons...');
   const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
+  
+  // Wipe directory to ensure clean state
   if (fs.existsSync(iosIconDir)) {
       try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e){}
   }
@@ -71,13 +87,25 @@ async function main() {
 
   if (sharp) {
     const iconBuffer = fs.readFileSync(sourceIcon);
-    // Process sequentially to avoid memory spikes
+    // Process sequentially
     for (const icon of iconSizes) {
         try {
-            await sharp(iconBuffer).resize(icon.size, icon.size).png().toFile(path.join(iosIconDir, icon.name));
-        } catch (e) { console.error(`Failed to gen ${icon.name}`, e.message); }
+            await sharp(iconBuffer)
+                .resize(icon.size, icon.size)
+                .png() // FORCE PNG OUTPUT regardless of input format
+                .toFile(path.join(iosIconDir, icon.name));
+        } catch (e) { 
+            console.error(`Failed to gen ${icon.name}: ${e.message}`);
+            // Fallback: Create a colored square if image is totally corrupt
+            if (icon.name.includes('512')) {
+                 const svgFallback = `<svg width="${icon.size}" height="${icon.size}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#0f766e"/></svg>`;
+                 fs.writeFileSync(path.join(iosIconDir, icon.name.replace('.png', '.svg')), svgFallback);
+            }
+        }
     }
   } else {
+    // Fallback if sharp failed to install: Just copy (Risky if source is JPG but iOS needs PNG)
+    console.warn("⚠️ Sharp missing. Copying source file directly. If source is JPG, this might fail on Apple side.");
     for (const icon of iconSizes) {
         fs.copyFileSync(sourceIcon, path.join(iosIconDir, icon.name));
     }
