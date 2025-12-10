@@ -108,63 +108,85 @@ async function main() {
       process.exit(1); 
   }
 
-  // 5. ADIM: İKON İŞLEMLERİ (Sadece Yerel Dosya)
-  // Capacitor Assets öncelikle logo.png dosyasını arar, yoksa icon.png dosyasına bakar.
-  let iconPath = null;
-  if (fs.existsSync('assets/logo.png')) {
-      iconPath = 'assets/logo.png';
-  } else if (fs.existsSync('assets/icon.png')) {
-      iconPath = 'assets/icon.png';
-  }
+  // 5. ADIM: İKON İŞLEMLERİ (logo.png veya icon.png)
+  console.log('🎨 İkon işlemleri başlatılıyor...');
   
-  if (iconPath) {
-      console.log(`🎨 İkon dosyası bulundu (${iconPath}). İşleniyor...`);
-      
-      try {
-          // Sharp'ı yükle
+  try {
+      // Sharp'ı yükle
+      if (!fs.existsSync('node_modules/sharp')) {
           console.log('📦 Görüntü işleme aracı (sharp) yükleniyor...');
           execSync('npm install sharp --no-save', { stdio: 'inherit' });
-
-          // Sharp modülünü dinamik olarak çağır
-          const sharpPath = path.resolve('./node_modules/sharp');
-          const sharp = require(sharpPath);
-
-          // RESİM ONARMA: Dosyayı oku ve zorla PNG olarak yeniden kaydet.
-          // Bu adım, uzantısı .png olup içeriği bozuk/farklı olan dosyaları düzeltir.
-          console.log('🛠️ İkon dosyası doğrulanıyor ve onarılıyor...');
-          const tempBuffer = fs.readFileSync(iconPath);
-          
-          // Geçici dosya adı
-          const fixedIconPath = 'assets/icon_fixed.png';
-
-          await sharp(tempBuffer)
-            .resize(1024, 1024, { fit: 'cover' }) // Boyutu garanti et
-            .png() // Zorla PNG yap
-            .toFile(fixedIconPath); // Geçici dosyaya yaz
-
-          // Orijinal dosyanın yerine fixed dosyayı koy
-          fs.renameSync(fixedIconPath, iconPath);
-          console.log(`✅ ${iconPath} onarıldı ve 1024x1024 PNG formatına çevrildi.`);
-
-          // Eski iOS ikonlarını sil (Temiz başlangıç)
-          const appIconSetPath = 'ios/App/App/Assets.xcassets/AppIcon.appiconset';
-          if (fs.existsSync(appIconSetPath)) {
-              console.log('🧹 Eski AppIcon seti temizleniyor...');
-              fs.rmSync(appIconSetPath, { recursive: true, force: true });
-          }
-
-          // Capacitor Assets'i çalıştır
-          console.log('🚀 İkonlar üretiliyor...');
-          execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
-          console.log('✅ İkon süreci tamamlandı.');
-
-      } catch (e) {
-          console.error('⚠️ İkon oluşturma hatası:', e.message);
-          console.error(`Lütfen "${iconPath}" dosyanızın geçerli bir resim olduğundan emin olun.`);
       }
-  } else {
-      console.log('⚠️ UYARI: "assets/logo.png" veya "assets/icon.png" dosyası bulunamadı!');
-      console.log('ℹ️ Varsayılan Capacitor ikonu kullanılacak. Kendi ikonunuzu eklemek için assets klasörüne logo.png (1024x1024) yükleyin.');
+
+      const sharpPath = path.resolve('./node_modules/sharp');
+      const sharp = require(sharpPath);
+
+      // Aday dosyalar (Öncelik sırası)
+      const candidates = ['assets/logo.png', 'assets/icon.png'];
+      let fileFound = false;
+
+      for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) {
+              fileFound = true;
+              console.log(`🔍 "${candidate}" dosyası bulundu. İşleniyor...`);
+              
+              try {
+                  const tempBuffer = fs.readFileSync(candidate);
+                  const fixedIconPath = 'assets/icon_fixed.png';
+
+                  // Resmi onar ve 1024x1024 PNG olarak kaydet
+                  await sharp(tempBuffer)
+                      .resize(1024, 1024, { fit: 'cover' })
+                      .png()
+                      .toFile(fixedIconPath);
+
+                  // Başarılıysa orijinalin üzerine yaz
+                  fs.renameSync(fixedIconPath, candidate);
+                  console.log(`✅ "${candidate}" doğrulandı ve optimize edildi.`);
+                  
+                  // Çakışmayı önlemek için diğer adayı temizle (eğer varsa)
+                  candidates.forEach(c => {
+                      if (c !== candidate && fs.existsSync(c)) {
+                          fs.unlinkSync(c);
+                      }
+                  });
+
+                  break; 
+              } catch (err) {
+                  console.error(`\n❌ KRİTİK HATA: "${candidate}" dosyası resim formatı olarak okunamadı!`);
+                  console.error(`👉 Teknik Hata: ${err.message}`);
+                  console.error(`💡 ÇÖZÜM: Dosyanızın uzantısı .png olsa bile içi JPEG veya WebP olabilir.`);
+                  console.error(`   Lütfen dosyayı Paint veya bir editörde açıp "Farklı Kaydet" diyerek PNG formatında tekrar kaydedin.\n`);
+                  // DOSYAYI SİLMİYORUZ. Kullanıcı hatayı görsün ve düzeltsin.
+                  break;
+              }
+          }
+      }
+
+      // Eğer HİÇ dosya yoksa varsayılan oluştur (Var olan bozuksa dokunma)
+      if (!fileFound) {
+          console.log('⚠️ İkon dosyası bulunamadı, varsayılan oluşturuluyor...');
+          const svgBuffer = Buffer.from(`
+            <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+              <rect width="1024" height="1024" fill="#0f766e"/>
+              <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="200" fill="white" font-weight="bold">NAMAZ</text>
+            </svg>
+          `);
+          
+          await sharp(svgBuffer)
+            .png()
+            .toFile('assets/logo.png');
+            
+          console.log('✅ Varsayılan "assets/logo.png" oluşturuldu.');
+      }
+
+      // Capacitor Assets'i çalıştır
+      console.log('🚀 Native ikonlar üretiliyor (capacitor-assets)...');
+      execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
+      console.log('✅ İkon süreci tamamlandı.');
+
+  } catch (e) {
+      console.error('⚠️ İkon oluşturma genel hatası:', e.message);
   }
 }
 
