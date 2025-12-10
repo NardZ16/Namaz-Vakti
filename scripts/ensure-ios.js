@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Robust Appflow Fix) ---');
+  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (v3 - Zombie Folder Fix) ---');
 
   // 0. ADIM: Gerekli Klasörleri Oluştur
   if (!fs.existsSync('dist')) {
@@ -15,22 +15,50 @@ async function main() {
     fs.mkdirSync('assets');
   }
 
-  // 1. ADIM: iOS Projesi Kontrolü
-  // Appflow'da bazen 'ios' klasörü önceden vardır, silmeyelim, sadece emin olalım.
-  if (!fs.existsSync('ios/App/App.xcodeproj')) {
-    console.log('⚠️ iOS projesi bulunamadı, ekleniyor...');
+  // 1. ADIM: iOS Projesi Kontrolü ve ONARIMI
+  // Sorun: Appflow'da bazen 'ios' klasörü kalıyor ama içi boş/bozuk oluyor.
+  // Çözüm: .xcodeproj yoksa, ios klasörünü kökten silip tekrar oluştur.
+  const xcodeProjPath = 'ios/App/App.xcodeproj';
+  
+  if (!fs.existsSync(xcodeProjPath)) {
+    console.log('⚠️ iOS proje dosyası bulunamadı.');
+    
+    // Eğer 'ios' klasörü varsa ama proje dosyası yoksa, bu bir "zombi" klasördür. Silelim.
+    if (fs.existsSync('ios')) {
+        console.log('🧹 Bozuk/Eksik iOS klasörü temizleniyor...');
+        try {
+            fs.rmSync('ios', { recursive: true, force: true });
+        } catch (e) {
+            console.error('⚠️ Klasör silinemedi (Devam ediliyor):', e.message);
+        }
+    }
+
+    console.log('✨ iOS platformu sıfırdan ekleniyor...');
     try {
       execSync('npx cap add ios', { stdio: 'inherit' });
     } catch (e) {
       console.error('❌ iOS eklenemedi:', e.message);
+      process.exit(1); // Kritik hata, durdur.
     }
+  } else {
+      console.log('✅ iOS projesi mevcut.');
+  }
+
+  // 1.5 ADIM: Sync İşlemi (Önemli)
+  // Platform eklendikten sonra veya zaten varsa, dist ve pluginleri senkronize etmeliyiz.
+  // Bu adım Assets klasörünün oluşmasını garantiler.
+  console.log('🔄 Capacitor Sync çalıştırılıyor...');
+  try {
+      execSync('npx cap sync ios', { stdio: 'inherit' });
+  } catch (e) {
+      console.warn('⚠️ Sync uyarısı:', e.message);
   }
 
   // 2. ADIM: PROFESYONEL İKON OLUŞTURMA
   console.log('🎨 İkon durumu kontrol ediliyor...');
   const logoPath = 'assets/logo.png';
   
-  // Sharp kurulumu (Eğer yoksa)
+  // Sharp kurulumu
   let sharp;
   try {
     sharp = require('sharp');
@@ -40,11 +68,11 @@ async function main() {
         execSync('npm install sharp --no-save', { stdio: 'inherit' });
         sharp = require('sharp');
     } catch (err) {
-        console.warn('⚠️ Sharp yüklenemedi, ikon oluşturulamayabilir.');
+        console.warn('⚠️ Sharp yüklenemedi, varsayılan ikon kullanılacak.');
     }
   }
 
-  // Eğer logo.png yoksa veya bozuksa, script kendisi oluşturacak.
+  // Logo kontrolü ve oluşturma
   let shouldGenerateNew = true;
   if (fs.existsSync(logoPath) && sharp) {
       try {
@@ -76,15 +104,19 @@ async function main() {
         <text x="512" y="850" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="140" fill="#d4af37" letter-spacing="10">NAMAZ</text>
       </svg>
       `;
-      const buffer = Buffer.from(iconSvg);
-      await sharp(buffer).resize(1024, 1024).png().toFile(logoPath);
-      console.log('✅ Yeni ikon oluşturuldu.');
+      try {
+        const buffer = Buffer.from(iconSvg);
+        await sharp(buffer).resize(1024, 1024).png().toFile(logoPath);
+        console.log('✅ Yeni ikon oluşturuldu.');
+      } catch (e) {
+        console.error('İkon oluşturma hatası:', e);
+      }
   }
 
-  // 3. ADIM: İKON SETİ KLASÖRÜNÜ HAZIRLA (OS DUYARLI)
+  // 3. ADIM: İKON SETİ KLASÖRÜNÜ HAZIRLA
   const iosAssetDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
   
-  // Sadece Windows ise sil (Kilitlenme sorunu için), Appflow'da (Linux/Mac) silme!
+  // Windows'ta kilitlenme sorunu için silme işlemi (Linux/Mac'te yapma)
   if (process.platform === 'win32' && fs.existsSync(iosAssetDir)) {
       try {
           fs.rmSync(iosAssetDir, { recursive: true, force: true });
@@ -92,7 +124,7 @@ async function main() {
       } catch (e) {}
   }
 
-  // 4. ADIM: ASSET GENERATION (OTOMATİK)
+  // 4. ADIM: ASSET GENERATION
   console.log('🚀 İkon setleri üretiliyor...');
   try {
       execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
@@ -100,26 +132,20 @@ async function main() {
       console.warn('⚠️ Otomatik ikon üretimi başarısız oldu (Failsafe devreye girecek).');
   }
 
-  // 5. ADIM: FAILSAFE (GÜVENLİK AĞI) - MANUEL OLUŞTURMA
-  // Eğer yukarıdaki işlem başarısız olduysa veya klasör boşsa, build patlamasın diye elle oluşturuyoruz.
+  // 5. ADIM: FAILSAFE (GÜVENLİK AĞI)
+  // Appflow'da capacitor-assets bazen izin hatası verir, bu durumda manuel oluştururuz.
   if (!fs.existsSync(iosAssetDir) || fs.readdirSync(iosAssetDir).length < 2) {
-      console.log('🛡️ Failsafe: AppIcon manuel olarak oluşturuluyor...');
+      console.log('🛡️ Failsafe: AppIcon manuel olarak onarılıyor...');
       
       if (!fs.existsSync(iosAssetDir)) {
           fs.mkdirSync(iosAssetDir, { recursive: true });
       }
 
-      // 1. Ana resmi kopyala (1024x1024)
       const destIconPath = path.join(iosAssetDir, 'AppIcon-1024.png');
       if (fs.existsSync(logoPath)) {
           fs.copyFileSync(logoPath, destIconPath);
-      } else {
-          // Logo bile yoksa boş dosya yaratma riskine girmeyelim, hata vermeli.
-          console.error('❌ Kritik: assets/logo.png bulunamadı.');
       }
 
-      // 2. Geçerli bir Contents.json yaz
-      // Bu JSON Xcode'a "Tüm boyutlar için bu tek dosyayı kullan" der (Single Size).
       const contentsJson = {
         "images" : [
           {
@@ -143,19 +169,20 @@ async function main() {
       };
       
       fs.writeFileSync(path.join(iosAssetDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
-      console.log('✅ Failsafe: AppIcon.appiconset onarıldı.');
+      console.log('✅ Failsafe: AppIcon.appiconset oluşturuldu.');
   }
 
-  // 6. ADIM: APP STORE VERSİYONLAMA
+  // 6. ADIM: APP STORE VERSİYONLAMA VE İZİNLER
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
-      console.log('📝 Versiyon numarası güncelleniyor...');
+      console.log('📝 Info.plist güncelleniyor...');
       let content = fs.readFileSync(infoPlistPath, 'utf8');
       
       const date = new Date();
-      // Appflow'da her build farklı olsun diye saniye bazlı versiyon
+      // YYYYMMDDHHmm formatı (Örn: 202405201430)
       const buildVersion = `${date.getFullYear()}${String(date.getMonth()+1).padStart(2,'0')}${String(date.getDate()).padStart(2,'0')}${String(date.getHours()).padStart(2,'0')}${String(date.getMinutes()).padStart(2,'0')}`;
       
+      // Versiyonu güncelle
       const regex = /(<key>CFBundleVersion<\/key>\s*<string>)([^<]+)(<\/string>)/;
       if (regex.test(content)) {
           content = content.replace(regex, `$1${buildVersion}$3`);
@@ -163,13 +190,15 @@ async function main() {
           content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVersion}</string>`);
       }
       
-      // İzin Açıklamaları (Eğer yoksa ekle)
+      // İzin Açıklamaları
       if (!content.includes('NSLocationWhenInUseUsageDescription')) {
            content = content.replace('<dict>', `<dict>
             <key>NSLocationWhenInUseUsageDescription</key>
-            <string>Namaz vakitleri için konum erişimi gereklidir.</string>
+            <string>Namaz vakitlerini hesaplamak için konumunuza ihtiyacımız var.</string>
             <key>NSLocationAlwaysUsageDescription</key>
-            <string>Namaz vakitleri için konum erişimi gereklidir.</string>
+            <string>Namaz vakitlerini hesaplamak için konumunuza ihtiyacımız var.</string>
+            <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+            <string>Namaz vakitlerini hesaplamak için konumunuza ihtiyacımız var.</string>
             <key>ITSAppUsesNonExemptEncryption</key>
             <false/>
            `);
@@ -178,7 +207,7 @@ async function main() {
       fs.writeFileSync(infoPlistPath, content);
   }
   
-  // 7. ADIM: Podfile Fix
+  // 7. ADIM: Podfile Fix (iOS 13.0+)
   const podfile = 'ios/App/Podfile';
   if (fs.existsSync(podfile)) {
       let pContent = fs.readFileSync(podfile, 'utf8');
@@ -191,7 +220,7 @@ async function main() {
       }
   }
 
-  console.log('✅ HAZIRLIK TAMAMLANDI!');
+  console.log('✅ HAZIRLIK BAŞARIYLA TAMAMLANDI!');
 }
 
 main();
