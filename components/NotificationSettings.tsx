@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NotificationConfig } from '../types';
-import { requestNotificationPermission } from '../services/notificationService';
+import { requestNotificationPermission, checkNotificationPermission } from '../services/notificationService';
 
 const PRAYER_KEYS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const PRAYER_NAMES: Record<string, string> = {
@@ -22,9 +22,7 @@ const SOUND_OPTIONS = [
 ];
 
 const NotificationSettings: React.FC = () => {
-  const [permission, setPermission] = useState<NotificationPermission>(
-    typeof Notification !== 'undefined' ? Notification.permission : 'default'
-  );
+  const [permission, setPermission] = useState<string>('default');
   const [config, setConfig] = useState<NotificationConfig>(() => {
     const saved = localStorage.getItem('notificationConfig');
     if (saved) return JSON.parse(saved);
@@ -35,6 +33,13 @@ const NotificationSettings: React.FC = () => {
     });
     return initial;
   });
+
+  useEffect(() => {
+    // Check initial permission state (Native aware)
+    checkNotificationPermission().then(granted => {
+        setPermission(granted ? 'granted' : 'default');
+    });
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('notificationConfig', JSON.stringify(config));
@@ -50,7 +55,7 @@ const NotificationSettings: React.FC = () => {
       ...prev,
       [key]: { ...prev[key], enabled: !prev[key].enabled }
     }));
-    if (permission === 'default') handleRequestPermission();
+    if (permission !== 'granted') handleRequestPermission();
   };
 
   const updateMinutes = (key: string, min: number) => {
@@ -72,9 +77,11 @@ const NotificationSettings: React.FC = () => {
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Bildirim Ayarları</h2>
       <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Vakitlerden önce bildirim ve ses alın.</p>
 
-      {permission !== 'granted' && permission !== 'denied' && (
+      {permission !== 'granted' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl mb-6 border border-amber-200 dark:border-amber-800">
-          <p className="text-amber-800 dark:text-amber-200 mb-2 text-sm font-semibold">Bildirim izni gerekli</p>
+          <p className="text-amber-800 dark:text-amber-200 mb-2 text-sm font-semibold">
+             {permission === 'denied' ? 'Bildirimler engellendi. Ayarlardan izin verin.' : 'Bildirim izni gerekli'}
+          </p>
           <button 
             onClick={handleRequestPermission}
             className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-600 transition-colors"
@@ -82,14 +89,6 @@ const NotificationSettings: React.FC = () => {
             Bildirimlere İzin Ver
           </button>
         </div>
-      )}
-
-      {permission === 'denied' && (
-         <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl mb-6 border border-red-200 dark:border-red-800">
-            <p className="text-red-800 dark:text-red-200 text-xs">
-               Bildirimlere tarayıcı ayarlarından izin verilmedi. Sesler çalmaya devam edebilir ancak görsel uyarı gelmeyebilir.
-            </p>
-         </div>
       )}
 
       <div className="space-y-4">

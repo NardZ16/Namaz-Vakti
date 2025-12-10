@@ -26,7 +26,6 @@ const Zikirmatik: React.FC = () => {
 
   const increment = () => {
     setCount(c => c + 1);
-    // Safe Native Haptic
     triggerHaptic('medium');
     if (resetState === 'CONFIRM') setResetState('IDLE');
   };
@@ -39,7 +38,6 @@ const Zikirmatik: React.FC = () => {
     } else {
         setCount(0);
         setResetState('IDLE');
-        // Success pattern
         triggerHaptic('success');
     }
   };
@@ -47,26 +45,31 @@ const Zikirmatik: React.FC = () => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-slate-900/50">
       
-      <div className="bg-[#fdfbf7] dark:bg-slate-800 rounded-[3rem] shadow-2xl p-6 w-72 h-[30rem] flex flex-col items-center justify-between border-8 border-gray-200 dark:border-slate-600 relative">
+      {/* Changed w-72 to max-w-sm w-full to be responsive, remove fixed h-[30rem] to h-auto or min-h */}
+      <div className="bg-[#fdfbf7] dark:bg-slate-800 rounded-[3rem] shadow-2xl p-6 w-full max-w-[300px] min-h-[450px] flex flex-col items-center justify-between border-8 border-gray-200 dark:border-slate-600 relative">
         
-        <div className="w-full bg-[#9ea7ad] dark:bg-slate-700 rounded-xl p-6 mb-4 shadow-inner border-4 border-[#8b949a] dark:border-slate-600 relative overflow-hidden">
+        {/* Screen Area - Ensure text fits */}
+        <div className="w-full bg-[#9ea7ad] dark:bg-slate-700 rounded-xl p-4 mb-4 shadow-inner border-4 border-[#8b949a] dark:border-slate-600 relative overflow-hidden flex items-center justify-center h-28">
              <div className="absolute inset-0 bg-black opacity-5 pointer-events-none"></div>
-             <span className="font-mono text-6xl font-black text-slate-800 dark:text-slate-200 tracking-widest drop-shadow-sm block text-center select-none">
+             {/* Dynamic font size based on length */}
+             <span className={`font-mono font-black text-slate-800 dark:text-slate-200 tracking-widest drop-shadow-sm block text-center select-none ${count.toString().length > 4 ? 'text-4xl' : 'text-5xl'}`}>
                 {count.toString().padStart(5, '0')}
              </span>
         </div>
 
+        {/* Big Button Area */}
         <div className="flex-1 flex items-center justify-center w-full relative my-2">
              <button 
               onClick={increment}
-              className="w-44 h-44 rounded-full bg-emerald-500 dark:bg-emerald-600 active:bg-emerald-600 dark:active:bg-emerald-700 active:scale-95 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-[6px] border-emerald-400 dark:border-emerald-700 flex items-center justify-center z-10 outline-none tap-highlight-transparent"
+              className="w-40 h-40 rounded-full bg-emerald-500 dark:bg-emerald-600 active:bg-emerald-600 dark:active:bg-emerald-700 active:scale-95 transition-all shadow-[0_10px_20px_rgba(0,0,0,0.2)] border-[6px] border-emerald-400 dark:border-emerald-700 flex items-center justify-center z-10 outline-none tap-highlight-transparent"
               aria-label="Say"
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              <div className="w-36 h-36 rounded-full border-2 border-emerald-400/30 pointer-events-none"></div>
+              <div className="w-32 h-32 rounded-full border-2 border-emerald-400/30 pointer-events-none"></div>
             </button>
         </div>
 
+        {/* Reset Button */}
         <div className="w-full flex justify-end items-center px-2 pt-4">
            <button 
             type="button"
@@ -81,7 +84,7 @@ const Zikirmatik: React.FC = () => {
               {resetState === 'CONFIRM' ? (
                   <span className="text-xs font-bold whitespace-nowrap animate-pulse">EMİN MİSİN?</span>
               ) : (
-                  <svg className="w-6 h-6 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
               )}
           </button>
           {resetState === 'IDLE' && (

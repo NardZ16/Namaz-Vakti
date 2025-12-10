@@ -7,6 +7,18 @@ interface QiblaCompassProps {
   longitude: number;
 }
 
+// Helper: Linear Interpolation for smoothing
+const lerp = (start: number, end: number, factor: number) => {
+  return start + (end - start) * factor;
+};
+
+// Calculate shortest rotation direction
+const shortestAngleDist = (from: number, to: number) => {
+    let diff = (to - from + 360) % 360;
+    if (diff > 180) diff -= 360;
+    return diff;
+};
+
 const DetailedRugIcon = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
   <svg 
     viewBox="0 0 300 500" 
@@ -15,84 +27,37 @@ const DetailedRugIcon = ({ className, style }: { className?: string, style?: Rea
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* Bottom Tassels - Thicker and Solid */}
     <g stroke="currentColor" strokeWidth="3" opacity="0.6">
-       <line x1="20" y1="480" x2="20" y2="500" />
-       <line x1="40" y1="480" x2="40" y2="500" />
-       <line x1="60" y1="480" x2="60" y2="500" />
-       <line x1="80" y1="480" x2="80" y2="500" />
-       <line x1="100" y1="480" x2="100" y2="500" />
-       <line x1="120" y1="480" x2="120" y2="500" />
-       <line x1="140" y1="480" x2="140" y2="500" />
-       <line x1="160" y1="480" x2="160" y2="500" />
-       <line x1="180" y1="480" x2="180" y2="500" />
-       <line x1="200" y1="480" x2="200" y2="500" />
-       <line x1="220" y1="480" x2="220" y2="500" />
-       <line x1="240" y1="480" x2="240" y2="500" />
-       <line x1="260" y1="480" x2="260" y2="500" />
-       <line x1="280" y1="480" x2="280" y2="500" />
+       {[...Array(14)].map((_, i) => <line key={`b-${i}`} x1={20 + i*20} y1="480" x2={20 + i*20} y2="500" />)}
     </g>
-
-    {/* Top Tassels */}
     <g stroke="currentColor" strokeWidth="3" opacity="0.6">
-       <line x1="20" y1="20" x2="20" y2="0" />
-       <line x1="40" y1="20" x2="40" y2="0" />
-       <line x1="60" y1="20" x2="60" y2="0" />
-       <line x1="80" y1="20" x2="80" y2="0" />
-       <line x1="100" y1="20" x2="100" y2="0" />
-       <line x1="120" y1="20" x2="120" y2="0" />
-       <line x1="140" y1="20" x2="140" y2="0" />
-       <line x1="160" y1="20" x2="160" y2="0" />
-       <line x1="180" y1="20" x2="180" y2="0" />
-       <line x1="200" y1="20" x2="200" y2="0" />
-       <line x1="220" y1="20" x2="220" y2="0" />
-       <line x1="240" y1="20" x2="240" y2="0" />
-       <line x1="260" y1="20" x2="260" y2="0" />
-       <line x1="280" y1="20" x2="280" y2="0" />
+       {[...Array(14)].map((_, i) => <line key={`t-${i}`} x1={20 + i*20} y1="20" x2={20 + i*20} y2="0" />)}
     </g>
-
-    {/* Main Body Background - Solid */}
     <rect x="20" y="20" width="260" height="460" rx="8" fill="currentColor" fillOpacity="0.85" />
-
-    {/* Inner Border Frame - Slightly lighter for contrast */}
     <rect x="35" y="35" width="230" height="430" rx="4" stroke="white" strokeOpacity="0.3" strokeWidth="2" fill="none" />
-
-    {/* The Mihrab (Arch) - Distinctive Feature */}
-    <path 
-      d="M50 440 V160 Q150 50 250 160 V440 H50 Z" 
-      fill="white" 
-      fillOpacity="0.15" 
-    />
-
-    {/* Decorative Top Spire inside Arch */}
+    <path d="M50 440 V160 Q150 50 250 160 V440 H50 Z" fill="white" fillOpacity="0.15" />
     <path d="M150 60 L150 90" stroke="white" strokeOpacity="0.4" strokeWidth="2" />
     <circle cx="150" cy="95" r="4" fill="white" fillOpacity="0.4" />
-
-    {/* Central Medallion / Geometric Pattern */}
     <g transform="translate(150, 240)">
-       {/* Diamond Shape */}
        <path d="M0 -40 L40 0 L0 40 L-40 0 Z" fill="white" fillOpacity="0.2" />
-       {/* Inner Circle */}
        <circle cx="0" cy="0" r="15" fill="currentColor" fillOpacity="0.8" stroke="white" strokeOpacity="0.3" strokeWidth="2"/>
-       {/* Center Dot */}
        <circle cx="0" cy="0" r="4" fill="white" fillOpacity="0.6" />
     </g>
-
-    {/* Bottom Footer Pattern */}
     <path d="M50 400 L250 400" stroke="white" strokeOpacity="0.2" strokeWidth="2" strokeDasharray="5 5" />
     <path d="M50 415 L250 415" stroke="white" strokeOpacity="0.2" strokeWidth="1" />
-
   </svg>
 );
 
 const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
   const [heading, setHeading] = useState<number>(0);
+  const [smoothHeading, setSmoothHeading] = useState<number>(0); // New smoothed state
   const [qiblaAngle, setQiblaAngle] = useState<number>(0);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
   const [isSupported, setIsSupported] = useState<boolean>(true);
   const [isAligned, setIsAligned] = useState<boolean>(false);
   
   const wasAlignedRef = useRef(false);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!latitude || !longitude) return;
@@ -110,26 +75,46 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
     setQiblaAngle((qibla + 360) % 360);
   }, [latitude, longitude]);
 
+  // SMOOTHING LOOP
   useEffect(() => {
-    let diff = Math.abs(qiblaAngle - heading);
+    const updateSmoothHeading = () => {
+        setSmoothHeading(prev => {
+            const diff = shortestAngleDist(prev, heading);
+            // Lerp factor 0.1 for smooth, 0.2 for faster
+            const newHeading = prev + diff * 0.1; 
+            return newHeading;
+        });
+        animationFrameRef.current = requestAnimationFrame(updateSmoothHeading);
+    };
+    updateSmoothHeading();
+    return () => {
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, [heading]);
+
+  useEffect(() => {
+    // Check alignment using smoothed value
+    const normalizedHeading = (smoothHeading + 360) % 360;
+    let diff = Math.abs(qiblaAngle - normalizedHeading);
     if (diff > 180) diff = 360 - diff;
 
     const aligned = diff < 5;
 
     if (aligned && !wasAlignedRef.current) {
-        // Use new Safe Haptic Service
         triggerHaptic('success');
     }
 
     wasAlignedRef.current = aligned;
     setIsAligned(aligned);
-  }, [heading, qiblaAngle]);
+  }, [smoothHeading, qiblaAngle]);
 
   const handleOrientation = (event: DeviceOrientationEvent) => {
     let compass = 0;
+    // iOS (WebKit) has specific property
     if ((event as any).webkitCompassHeading) {
       compass = (event as any).webkitCompassHeading;
     } else if (event.alpha !== null) {
+       // Android/Non-Webkit
        compass = Math.abs(360 - event.alpha);
     }
     setHeading(compass);
@@ -166,7 +151,8 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
     }
   }, []);
 
-  const userRugRotation = heading - qiblaAngle;
+  // Use smoothed heading for rotation
+  const userRugRotation = ((smoothHeading - qiblaAngle) + 360) % 360;
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-slate-900 relative overflow-hidden">
@@ -188,11 +174,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
 
       {!isSupported ? (
          <div className="text-center z-10 p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
-             <div className="text-amber-500 mb-2 flex justify-center">
-                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-             </div>
              <p className="text-gray-600 dark:text-gray-300 font-bold">Cihazınızda pusula sensörü bulunamadı.</p>
-             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Bu özellik sadece telefon veya tabletlerde çalışır.</p>
          </div>
       ) : !permissionGranted ? (
         <div className="text-center z-10">
@@ -207,6 +189,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
       ) : (
         <>
           <div className="relative w-80 h-[30rem] z-10 flex items-center justify-center">
+            {/* Fixed Background Rug (Target) */}
             <div className="absolute w-52 h-[22rem] text-gray-400 dark:text-slate-700 flex flex-col items-center justify-center">
                 <DetailedRugIcon className="w-full h-full drop-shadow-sm opacity-50" />
                 <div className="absolute top-[40%] text-[10px] font-bold tracking-[0.2em] text-gray-500 dark:text-slate-600 uppercase opacity-70">
@@ -214,8 +197,9 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
                 </div>
             </div>
 
+            {/* Rotating User Rug */}
             <div 
-                className={`absolute w-52 h-[22rem] transition-all duration-300 ease-out origin-center ${isAligned ? 'text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]' : 'text-emerald-600 dark:text-emerald-500 opacity-90'}`}
+                className={`absolute w-52 h-[22rem] origin-center will-change-transform ${isAligned ? 'text-emerald-500 drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]' : 'text-emerald-600 dark:text-emerald-500 opacity-90'}`}
                 style={{ transform: `rotate(${userRugRotation}deg)` }}
             >
                 <DetailedRugIcon className="w-full h-full" />
@@ -233,7 +217,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
             </div>
             
              <div className="absolute -bottom-8 w-full text-center text-[10px] text-gray-400 font-mono opacity-60">
-               Pusula: {heading.toFixed(0)}° | Kıble: {qiblaAngle.toFixed(0)}°
+               Derece: {((360 - userRugRotation) % 360).toFixed(0)}°
             </div>
           </div>
         </>

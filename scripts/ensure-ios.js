@@ -3,7 +3,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Reklamsız) ---');
+  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Reklamsız & Konum İzinli) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -36,7 +36,26 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Podfile Düzenleme (Platform Ayarı)
+  // 2. ADIM: Info.plist Düzenleme (Konum İzinleri)
+  const infoPlistPath = 'ios/App/App/Info.plist';
+  if (fs.existsSync(infoPlistPath)) {
+      console.log('📝 Info.plist: Konum izinleri ekleniyor...');
+      let plistContent = fs.readFileSync(infoPlistPath, 'utf8');
+
+      if (!plistContent.includes('NSLocationWhenInUseUsageDescription')) {
+          const locationPermissions = `
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Namaz vakitlerini ve kıble yönünü doğru hesaplamak için konumunuza ihtiyacımız var.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>Namaz vakitlerini ve kıble yönünü doğru hesaplamak için konumunuza ihtiyacımız var.</string>
+          `;
+          // <dict> etiketinin hemen altına ekle
+          plistContent = plistContent.replace('<dict>', '<dict>' + locationPermissions);
+          fs.writeFileSync(infoPlistPath, plistContent);
+      }
+  }
+
+  // 3. ADIM: Podfile Düzenleme (Platform Ayarı)
   const podfilePath = 'ios/App/Podfile';
   if (fs.existsSync(podfilePath)) {
       console.log('🔧 Podfile: Platform iOS 13.0 ayarlanıyor...');
@@ -52,7 +71,7 @@ async function main() {
       fs.writeFileSync(podfilePath, podfileContent);
   }
 
-  // 3. ADIM: Sync ve Pod Install
+  // 4. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
