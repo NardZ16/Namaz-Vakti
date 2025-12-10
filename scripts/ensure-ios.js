@@ -3,7 +3,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Reklamsız & Konum İzinli) ---');
+  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Reklamsız & Konum İzinli & Auto-Compliance & Auto-Version) ---');
 
   // 0. ADIM: dist klasörü kontrolü
   if (!fs.existsSync('dist')) {
@@ -36,12 +36,13 @@ async function main() {
     console.log('✅ iOS projesi mevcut.');
   }
 
-  // 2. ADIM: Info.plist Düzenleme (Konum İzinleri)
+  // 2. ADIM: Info.plist Düzenleme (Konum, Şifreleme ve Build Numarası)
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
-      console.log('📝 Info.plist: Konum izinleri ekleniyor...');
+      console.log('📝 Info.plist düzenleniyor...');
       let plistContent = fs.readFileSync(infoPlistPath, 'utf8');
 
+      // Konum İzinleri
       if (!plistContent.includes('NSLocationWhenInUseUsageDescription')) {
           const locationPermissions = `
     <key>NSLocationWhenInUseUsageDescription</key>
@@ -49,10 +50,44 @@ async function main() {
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Namaz vakitlerini ve kıble yönünü doğru hesaplamak için konumunuza ihtiyacımız var.</string>
           `;
-          // <dict> etiketinin hemen altına ekle
           plistContent = plistContent.replace('<dict>', '<dict>' + locationPermissions);
-          fs.writeFileSync(infoPlistPath, plistContent);
       }
+
+      // Şifreleme Uyumluluğu (Missing Compliance uyarısını atlamak için)
+      if (!plistContent.includes('ITSAppUsesNonExemptEncryption')) {
+          const encryptionKey = `
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+          `;
+          plistContent = plistContent.replace('<dict>', '<dict>' + encryptionKey);
+      }
+
+      // 🔄 OTO BUILD NUMARASI GÜNCELLEME (TestFlight için ŞART)
+      // Format: YYYYMMDDHHmm (Örn: 202512081430)
+      const now = new Date();
+      const buildNumber = now.getFullYear().toString() +
+                          (now.getMonth() + 1).toString().padStart(2, '0') +
+                          now.getDate().toString().padStart(2, '0') +
+                          now.getHours().toString().padStart(2, '0') +
+                          now.getMinutes().toString().padStart(2, '0');
+
+      console.log(`🔢 Build Numarası Güncelleniyor: ${buildNumber}`);
+
+      // CFBundleVersion değerini bul ve değiştir
+      // Regex: <key>CFBundleVersion</key> (boşluk/yeni satır) <string>ESKI_NO</string>
+      const buildVerRegex = /(<key>CFBundleVersion<\/key>[\s\r\n]*<string>)([^<]+)(<\/string>)/;
+      
+      if (buildVerRegex.test(plistContent)) {
+          plistContent = plistContent.replace(buildVerRegex, `$1${buildNumber}$3`);
+      } else {
+          // Eğer regex bulamazsa (nadir), manuel eklemeyi dene veya uyar
+          console.warn("⚠️ CFBundleVersion bulunamadı, manuel ekleniyor...");
+          plistContent = plistContent.replace('<dict>', `<dict>
+    <key>CFBundleVersion</key>
+    <string>${buildNumber}</string>`);
+      }
+
+      fs.writeFileSync(infoPlistPath, plistContent);
   }
 
   // 3. ADIM: Podfile Düzenleme (Platform Ayarı)
