@@ -109,10 +109,16 @@ async function main() {
   }
 
   // 5. ADIM: İKON İŞLEMLERİ (Sadece Yerel Dosya)
-  const iconPath = 'assets/icon.png';
+  // Capacitor Assets öncelikle logo.png dosyasını arar, yoksa icon.png dosyasına bakar.
+  let iconPath = null;
+  if (fs.existsSync('assets/logo.png')) {
+      iconPath = 'assets/logo.png';
+  } else if (fs.existsSync('assets/icon.png')) {
+      iconPath = 'assets/icon.png';
+  }
   
-  if (fs.existsSync(iconPath)) {
-      console.log('🎨 İkon dosyanız bulundu. İşleniyor...');
+  if (iconPath) {
+      console.log(`🎨 İkon dosyası bulundu (${iconPath}). İşleniyor...`);
       
       try {
           // Sharp'ı yükle
@@ -128,14 +134,17 @@ async function main() {
           console.log('🛠️ İkon dosyası doğrulanıyor ve onarılıyor...');
           const tempBuffer = fs.readFileSync(iconPath);
           
+          // Geçici dosya adı
+          const fixedIconPath = 'assets/icon_fixed.png';
+
           await sharp(tempBuffer)
             .resize(1024, 1024, { fit: 'cover' }) // Boyutu garanti et
             .png() // Zorla PNG yap
-            .toFile('assets/icon_fixed.png'); // Geçici dosyaya yaz
+            .toFile(fixedIconPath); // Geçici dosyaya yaz
 
           // Orijinal dosyanın yerine fixed dosyayı koy
-          fs.renameSync('assets/icon_fixed.png', iconPath);
-          console.log('✅ İkon dosyası onarıldı ve 1024x1024 PNG formatına çevrildi.');
+          fs.renameSync(fixedIconPath, iconPath);
+          console.log(`✅ ${iconPath} onarıldı ve 1024x1024 PNG formatına çevrildi.`);
 
           // Eski iOS ikonlarını sil (Temiz başlangıç)
           const appIconSetPath = 'ios/App/App/Assets.xcassets/AppIcon.appiconset';
@@ -151,11 +160,11 @@ async function main() {
 
       } catch (e) {
           console.error('⚠️ İkon oluşturma hatası:', e.message);
-          console.error('Lütfen "assets/icon.png" dosyanızın geçerli bir resim olduğundan emin olun.');
+          console.error(`Lütfen "${iconPath}" dosyanızın geçerli bir resim olduğundan emin olun.`);
       }
   } else {
-      console.log('⚠️ UYARI: "assets/icon.png" dosyası bulunamadı!');
-      console.log('ℹ️ Varsayılan Capacitor ikonu kullanılacak. Kendi ikonunuzu eklemek için assets klasörüne icon.png yükleyin.');
+      console.log('⚠️ UYARI: "assets/logo.png" veya "assets/icon.png" dosyası bulunamadı!');
+      console.log('ℹ️ Varsayılan Capacitor ikonu kullanılacak. Kendi ikonunuzu eklemek için assets klasörüne logo.png (1024x1024) yükleyin.');
   }
 }
 
