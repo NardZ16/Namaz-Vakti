@@ -6,7 +6,7 @@ const https = require('https');
 // 👇👇👇 İKON AYARI 👇👇👇
 // Yerel dosya sorunlarını aşmak için ikonu internetten çekiyoruz.
 // İstediğiniz herhangi bir doğrudan resim linkini buraya yapıştırabilirsiniz.
-const ICON_URL = "https://cdn-icons-png.flaticon.com/512/4358/4358667.png"; 
+const ICON_URL = "https://i.hizliresim.com/sgt99br.png"; 
 // 👆👆👆 ---------------- 👆👆👆
 
 async function downloadImage(url) {
