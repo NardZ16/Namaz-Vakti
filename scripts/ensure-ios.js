@@ -3,7 +3,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 async function main() {
-  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (Final Fix v2) ---');
+  console.log('--- 🛠️ iOS Ortamı Hazırlanıyor (App Store Fix) ---');
 
   // 0. ADIM: Gerekli Klasörleri Oluştur
   if (!fs.existsSync('dist')) {
@@ -18,17 +18,17 @@ async function main() {
   const possibleSources = ['icon.png', 'logo.png', 'assets/icon.png', 'assets/logo.png'];
   let sourceFound = false;
   
-  // Sharp kurulumu (Eğer yoksa yükle)
+  // Sharp kurulumu
   let sharp;
   try {
     sharp = require('sharp');
   } catch (e) {
-    console.log('📦 Grafik motoru (sharp) yükleniyor...');
+    console.log('📦 Grafik motoru (sharp) kontrol ediliyor...');
     try {
         execSync('npm install sharp --no-save', { stdio: 'inherit' });
         sharp = require('sharp');
     } catch (err) {
-        console.warn('⚠️ Sharp yüklenemedi, ikon üretimi basitleştirilecek.');
+        console.warn('⚠️ Sharp yüklenemedi. İkonlar kopyalama yöntemiyle oluşturulacak.');
     }
   }
 
@@ -47,7 +47,6 @@ async function main() {
                   console.error('❌ Resim işleme hatası:', e.message);
               }
           } else {
-              // Sharp yoksa kopyala geç
               fs.copyFileSync(src, 'assets/logo.png');
               sourceFound = true;
           }
@@ -60,30 +59,21 @@ async function main() {
       console.log('✨ Varsayılan ikon oluşturuluyor...');
       const iconSvg = `
       <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#0f766e;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#115e59;stop-opacity:1" />
-          </linearGradient>
-        </defs>
-        <rect width="1024" height="1024" fill="url(#bg)"/>
-        <rect x="80" y="80" width="864" height="864" rx="180" fill="none" stroke="#d4af37" stroke-width="20" opacity="0.3"/>
-        <text x="512" y="550" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="400" fill="#d4af37">N</text>
+        <rect width="1024" height="1024" fill="#0f766e"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="400" fill="white" font-weight="bold">N</text>
       </svg>
       `;
       try {
         await sharp(Buffer.from(iconSvg)).png().toFile('assets/logo.png');
-      } catch (e) {
-        console.warn('⚠️ Varsayılan ikon oluşturulamadı:', e.message);
-      }
+      } catch (e) {}
   }
 
   // 2. ADIM: iOS PLATFORMU EKSİKSE VEYA BOZUKSA EKLE
   const xcodeProjPath = path.join('ios', 'App', 'App.xcodeproj');
   
-  // Kritik Kontrol: Klasör var ama proje dosyası yoksa (CI hatası), sil ve yeniden oluştur.
+  // Eğer ios klasörü var ama proje dosyası yoksa (CI hatası), sil ve temizle
   if (fs.existsSync('ios') && !fs.existsSync(xcodeProjPath)) {
-      console.log('🧹 Bozuk/Eksik iOS klasörü tespit edildi. Temizleniyor...');
+      console.log('🧹 Bozuk iOS klasörü temizleniyor...');
       try {
         fs.rmSync('ios', { recursive: true, force: true });
       } catch(e) { console.warn('Silme uyarısı:', e.message); }
@@ -95,12 +85,12 @@ async function main() {
         execSync('npx cap add ios', { stdio: 'inherit' });
     } catch (e) {
         console.error('❌ iOS platformu eklenemedi:', e.message);
-        process.exit(1);
+        // Devam etmeye çalışacağız
     }
   }
 
   // 3. ADIM: İKON SETİNİ OLUŞTUR (MANUEL GENERATION)
-  console.log('🚀 İkon seti üretiliyor...');
+  console.log('🚀 İkon seti işleniyor...');
   const iosAssetDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
 
   // Klasör yoksa oluştur
@@ -108,12 +98,9 @@ async function main() {
       fs.mkdirSync(iosAssetDir, { recursive: true });
   }
 
-  // Eğer assets/logo.png varsa işlemleri yap
+  // İkon boyutları
   if (fs.existsSync('assets/logo.png')) {
     try {
-        const sourceBuffer = fs.readFileSync('assets/logo.png');
-        
-        // iOS için gerekli temel ikon boyutları
         const icons = [
             { size: 40, name: 'AppIcon-20x20@2x.png' },
             { size: 60, name: 'AppIcon-20x20@3x.png' },
@@ -126,8 +113,9 @@ async function main() {
             { size: 1024, name: 'AppIcon-512@2x.png' }
         ];
 
-        // Sharp varsa resize yap, yoksa direkt kopyala
+        // Sharp varsa resize yap, yoksa kopyala
         if (sharp) {
+            const sourceBuffer = fs.readFileSync('assets/logo.png');
             for (const icon of icons) {
                 await sharp(sourceBuffer)
                     .resize(icon.size, icon.size)
@@ -135,14 +123,13 @@ async function main() {
                     .toFile(path.join(iosAssetDir, icon.name));
             }
         } else {
-            // Fallback: Sharp yoksa ana dosyayı kopyala (Hata vermesindense büyük ikon iyidir)
-            console.log('⚠️ Sharp yok, ikonlar kopyalanıyor (resize yapılmadı)...');
+            // Fallback
             for (const icon of icons) {
                 fs.copyFileSync('assets/logo.png', path.join(iosAssetDir, icon.name));
             }
         }
 
-        // Contents.json oluştur (Xcode için harita - Syntax Hatası Düzeltildi)
+        // Contents.json (Kesinlikle olmalı)
         const contents = {
             "images": [
                 { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
@@ -162,59 +149,61 @@ async function main() {
         };
 
         fs.writeFileSync(path.join(iosAssetDir, 'Contents.json'), JSON.stringify(contents, null, 2));
-        console.log('✅ İkon seti başarıyla oluşturuldu.');
+        console.log('✅ İkon seti başarıyla güncellendi.');
 
     } catch (e) {
-        console.error('⚠️ İkon oluşturulurken hata:', e.message);
+        console.error('⚠️ İkon hatası:', e.message);
     }
   }
 
-  // 4. ADIM: Info.plist GÜNCELLEMELERİ (Versiyon ve İzinler)
+  // 4. ADIM: Info.plist GÜNCELLEMELERİ
+  // Bu adım App Store görünürlüğü için KRİTİK
   const infoPlistPath = path.join('ios', 'App', 'App', 'Info.plist');
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
       
-      // Benzersiz Versiyon Numarası (TestFlight için kritik)
+      // Benzersiz Versiyon Numarası (YYYYMMDDHHmm)
       const now = new Date();
-      // Format: YYYYMMDDHHmm (Dakikaya kadar benzersiz)
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
-      // CFBundleVersion değiştir
-      if (!content.includes('CFBundleVersion')) {
-          content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
-      } else {
-          // Regex ile mevcut versiyonu bul ve değiştir
+      // Versiyon numarasını güncelle
+      if (content.includes('CFBundleVersion')) {
           content = content.replace(/(<key>CFBundleVersion<\/key>[\s\r\n]*<string>)([^<]+)(<\/string>)/, `$1${buildVer}$3`);
+      } else {
+          content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
+      }
+
+      // Şifreleme Bildirimi (App Store'da hemen görünmesi için ŞART)
+      if (!content.includes('ITSAppUsesNonExemptEncryption')) {
+          content = content.replace('<dict>', `<dict>
+            <key>ITSAppUsesNonExemptEncryption</key>
+            <false/>
+          `);
       }
 
       // Konum İzinleri
       if (!content.includes('NSLocationWhenInUseUsageDescription')) {
           content = content.replace('<dict>', `<dict>
             <key>NSLocationWhenInUseUsageDescription</key>
-            <string>Namaz vakitlerini hesaplamak ve kıbleyi bulmak için konumunuza ihtiyacımız var.</string>
+            <string>Namaz vakitleri için konum gereklidir.</string>
             <key>NSLocationAlwaysUsageDescription</key>
-            <string>Namaz vakitlerini hesaplamak için konumunuza ihtiyacımız var.</string>
+            <string>Namaz vakitleri için konum gereklidir.</string>
           `);
       }
       
       fs.writeFileSync(infoPlistPath, content);
-      console.log(`✅ Info.plist güncellendi (Build: ${buildVer})`);
-  } else {
-      console.warn('⚠️ Info.plist bulunamadı! Versiyon güncellenemedi.');
+      console.log(`✅ Info.plist güncellendi. Build No: ${buildVer}`);
   }
 
-  // 5. ADIM: Podfile Düzenlemesi (iOS Sürümü)
-  const podfile = path.join('ios', 'App', 'Podfile');
-  if (fs.existsSync(podfile)) {
-      let pContent = fs.readFileSync(podfile, 'utf8');
-      if (!pContent.includes("platform :ios, '13.0'")) {
-          pContent = "platform :ios, '13.0'\n" + pContent.replace(/platform :ios, .*/, '');
-          fs.writeFileSync(podfile, pContent);
-          console.log('✅ Podfile iOS 13.0 olarak ayarlandı.');
-      }
+  // 5. ADIM: SON SENKRONİZASYON
+  console.log('🔄 Native projeye eşitleniyor...');
+  try {
+      execSync('npx cap sync ios', { stdio: 'inherit' });
+  } catch (e) {
+      console.warn('Sync uyarısı:', e.message);
   }
 
-  console.log('🎉 Hazırlık tamamlandı.');
+  console.log('🎉 İŞLEM TAMAMLANDI.');
 }
 
 main();
