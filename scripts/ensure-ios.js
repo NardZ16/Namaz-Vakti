@@ -3,169 +3,123 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 async function main() {
-  console.log('--- 🍎 iOS Build & Icon Fixer Started (JPG Support) ---');
+  console.log('--- 🍎 iOS Build Hazırlığı (Standart Mod) ---');
 
-  // 1. SETUP & CLEANUP
-  if (!fs.existsSync('assets')) fs.mkdirSync('assets');
-  if (!fs.existsSync('dist')) {
-    fs.mkdirSync('dist');
-    fs.writeFileSync('dist/index.html', '<html><body>Placeholder</body></html>');
-  }
-  
-  // Detect Icon Source (Added JPG/JPEG support)
-  const candidates = [
-      'icon.png', 'icon.jpg', 'icon.jpeg',
-      'logo.png', 'logo.jpg', 'logo.jpeg',
-      'assets/icon.png', 'assets/icon.jpg', 'assets/icon.jpeg',
-      'assets/logo.png', 'assets/logo.jpg', 'assets/logo.jpeg'
-  ];
-  
-  let sourceIcon = null;
-  for (const c of candidates) {
-      if (fs.existsSync(c)) {
-          sourceIcon = c;
-          console.log(`📦 Found source icon: ${c}`);
-          break;
-      }
-  }
-  
-  // Install Sharp if needed (Critical for conversion)
-  let sharp;
-  try {
-    sharp = require('sharp');
-  } catch (e) {
-    console.log('📦 Installing image processor (sharp)...');
+  // 1. iOS Platform Kontrolü
+  if (!fs.existsSync('ios/App/App.xcodeproj')) {
+    console.log('✨ iOS platformu ekleniyor...');
+    // iOS klasörü bozuksa temizle
+    if (fs.existsSync('ios')) fs.rmSync('ios', { recursive: true, force: true });
     try {
-      execSync('npm install sharp --no-save', { stdio: 'ignore' });
-      sharp = require('sharp');
-    } catch (err) {
-      console.warn('⚠️ Sharp install failed.');
+        execSync('npx cap add ios', { stdio: 'inherit' });
+    } catch (e) {
+        console.error('❌ iOS platformu eklenemedi:', e.message);
     }
   }
 
-  // If no icon or sharp missing, create/use default SVG
-  if (!sourceIcon) {
-    console.log('⚠️ No icon found. Creating default logo.png...');
-    const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect width="1024" height="1024" fill="#0f766e"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="500" fill="white">N</text></svg>`;
-    fs.writeFileSync('assets/logo.png', svg);
-    sourceIcon = 'assets/logo.png';
-  }
-
-  // 2. IOS PLATFORM CHECK (Fix Zombie Folder)
-  const xcodeProj = path.join('ios', 'App', 'App.xcodeproj');
-  if (fs.existsSync('ios') && !fs.existsSync(xcodeProj)) {
-      console.log('🧹 Cleaning corrupted iOS folder...');
-      fs.rmSync('ios', { recursive: true, force: true });
-  }
-
-  if (!fs.existsSync('ios')) {
-      console.log('✨ Adding iOS platform...');
-      execSync('npx cap add ios', { stdio: 'inherit' });
-  }
-
-  // 3. GENERATE ICONS MANUALLY
-  console.log('🎨 Generating iOS Icons...');
-  const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
+  // 2. Kaynak Resim Hazırlığı (Sadece Kaynağı Düzeltir)
+  // Capacitor Assets aracı 'assets/logo.png' veya 'assets/icon.png' arar.
+  // Kullanıcının yüklediği dosya bozuk formatta olabilir (adı png ama içi jpg).
+  // Bunu düzeltip bırakacağız, üretimi araca bırakacağız.
   
-  // Wipe directory to ensure clean state
-  if (fs.existsSync(iosIconDir)) {
-      try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e){}
-  }
-  fs.mkdirSync(iosIconDir, { recursive: true });
+  if (!fs.existsSync('assets')) fs.mkdirSync('assets');
 
-  const iconSizes = [
-    { name: 'AppIcon-20x20@2x.png', size: 40 },
-    { name: 'AppIcon-20x20@3x.png', size: 60 },
-    { name: 'AppIcon-29x29@2x.png', size: 58 },
-    { name: 'AppIcon-29x29@3x.png', size: 87 },
-    { name: 'AppIcon-40x40@2x.png', size: 80 },
-    { name: 'AppIcon-40x40@3x.png', size: 120 },
-    { name: 'AppIcon-60x60@2x.png', size: 120 },
-    { name: 'AppIcon-60x60@3x.png', size: 180 },
-    { name: 'AppIcon-512@2x.png',   size: 1024 }
+  const potentialFiles = [
+    'icon.png', 'icon.jpg', 'icon.jpeg',
+    'logo.png', 'logo.jpg', 'logo.jpeg',
+    'assets/icon.png', 'assets/icon.jpg',
+    'assets/logo.png', 'assets/logo.jpg'
   ];
 
-  if (sharp) {
-    const iconBuffer = fs.readFileSync(sourceIcon);
-    // Process sequentially
-    for (const icon of iconSizes) {
-        try {
-            await sharp(iconBuffer)
-                .resize(icon.size, icon.size)
-                .png() // FORCE PNG OUTPUT regardless of input format
-                .toFile(path.join(iosIconDir, icon.name));
-        } catch (e) { 
-            console.error(`Failed to gen ${icon.name}: ${e.message}`);
-            // Fallback: Create a colored square if image is totally corrupt
-            if (icon.name.includes('512')) {
-                 const svgFallback = `<svg width="${icon.size}" height="${icon.size}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#0f766e"/></svg>`;
-                 fs.writeFileSync(path.join(iosIconDir, icon.name.replace('.png', '.svg')), svgFallback);
-            }
-        }
+  let sourceFile = null;
+  for (const f of potentialFiles) {
+    if (fs.existsSync(f)) {
+      sourceFile = f;
+      break;
     }
+  }
+
+  if (sourceFile) {
+      console.log(`📦 Kaynak resim bulundu: ${sourceFile}`);
+      try {
+          const sharp = require('sharp');
+          const inputBuffer = fs.readFileSync(sourceFile);
+          
+          // Resmi standart PNG'ye çevirip assets/logo.png olarak kaydet
+          // Bu işlem "Unsupported Image Format" hatasını önler.
+          await sharp(inputBuffer)
+            .resize(1024, 1024, { fit: 'cover' }) // Kare format garantisi
+            .png()
+            .toFile('assets/logo.png');
+            
+          console.log('✅ Kaynak resim onarıldı ve assets/logo.png konumuna hazırlandı.');
+      } catch (e) {
+          console.warn('⚠️ Resim işlenemedi (Sharp yüklü değil veya hata), dosya olduğu gibi kullanılıyor.');
+          // Sharp yoksa ve dosya assets/logo.png değilse oraya kopyala
+          if (sourceFile !== 'assets/logo.png') {
+              fs.copyFileSync(sourceFile, 'assets/logo.png');
+          }
+      }
   } else {
-    // Fallback if sharp failed to install: Just copy (Risky if source is JPG but iOS needs PNG)
-    console.warn("⚠️ Sharp missing. Copying source file directly. If source is JPG, this might fail on Apple side.");
-    for (const icon of iconSizes) {
-        fs.copyFileSync(sourceIcon, path.join(iosIconDir, icon.name));
-    }
+      console.warn('⚠️ Herhangi bir ikon dosyası bulunamadı. Varsayılan Capacitor ikonu kullanılacak.');
   }
 
-  // Create Contents.json
-  const contentsJson = {
-    "images": [
-      { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
-      { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@3x.png", "scale": "3x" },
-      { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@2x.png", "scale": "2x" },
-      { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@3x.png", "scale": "3x" },
-      { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@2x.png", "scale": "2x" },
-      { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@3x.png", "scale": "3x" },
-      { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@2x.png", "scale": "2x" },
-      { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@3x.png", "scale": "3x" },
-      { "size": "1024x1024", "idiom": "ios-marketing", "filename": "AppIcon-512@2x.png", "scale": "1x" }
-    ],
-    "info": { "version": 1, "author": "xcode" }
-  };
-  fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
-
-  // 4. UPDATE INFO.PLIST (Versioning & Permissions)
-  const plistPath = path.join('ios', 'App', 'App', 'Info.plist');
-  if (fs.existsSync(plistPath)) {
-      let plist = fs.readFileSync(plistPath, 'utf8');
-      
-      // Generate Unique Build Number: YYYYMMDDHHmm
-      const d = new Date();
-      const ver = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
-      
-      if (plist.includes('CFBundleVersion')) {
-        plist = plist.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>[^<]+<\/string>/, `<key>CFBundleVersion</key>\n<string>${ver}</string>`);
-      } else {
-        plist = plist.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${ver}</string>`);
-      }
-
-      // Encryption Exemption (Vital for TestFlight visibility)
-      if (!plist.includes('ITSAppUsesNonExemptEncryption')) {
-        plist = plist.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
-      }
-
-      // Usage Descriptions
-      if (!plist.includes('NSLocationWhenInUseUsageDescription')) {
-        plist = plist.replace('<dict>', `<dict>
-        <key>NSLocationWhenInUseUsageDescription</key><string>Namaz vakitleri hesaplaması için konum gereklidir.</string>
-        <key>NSLocationAlwaysUsageDescription</key><string>Namaz vakitleri hesaplaması için konum gereklidir.</string>`);
-      }
-
-      fs.writeFileSync(plistPath, plist);
-      console.log(`✅ Version bumped to: ${ver}`);
+  // 3. Standart İkon Oluşturma Aracı (Kullanıcının isteği üzerine)
+  console.log('🚀 Standart araç ile ikonlar üretiliyor...');
+  
+  // Windows kilitlenme hatasını önlemek için hedef klasörü temizle
+  const iosAssetDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
+  if (fs.existsSync(iosAssetDir)) {
+      try { fs.rmSync(iosAssetDir, { recursive: true, force: true }); } catch(e) {}
   }
 
-  // 5. SYNC
-  console.log('🔄 Syncing Capacitor...');
+  try {
+      execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
+      console.log('✅ İkonlar başarıyla oluşturuldu.');
+  } catch (e) {
+      console.error('❌ İkon oluşturma aracı hatası:', e.message);
+      console.log('ℹ️ İkonlar oluşturulamadıysa bile build devam edecek.');
+  }
+
+  // 4. Info.plist Güncellemeleri (App Store Connect'te görünmesi için ŞART)
+  const infoPlistPath = 'ios/App/App/Info.plist';
+  if (fs.existsSync(infoPlistPath)) {
+      let content = fs.readFileSync(infoPlistPath, 'utf8');
+      
+      // A. Benzersiz Versiyon Numarası (Duplicate build hatasını önler)
+      const now = new Date();
+      // Format: YYYYMMDDHHmm
+      const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      // Mevcut CFBundleVersion'ı temizle ve yenisini ekle
+      content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, '');
+      content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
+
+      // B. Şifreleme İzni (Export Compliance - Build'in görünmemesini çözer)
+      // Eğer bu ayar yoksa Apple "Missing Compliance" der ve testflight'a düşmez.
+      if (!content.includes('ITSAppUsesNonExemptEncryption')) {
+          content = content.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
+      }
+
+      // C. Konum İzin Açıklamaları (Reddedilmeyi önler)
+      if (!content.includes('NSLocationWhenInUseUsageDescription')) {
+          content = content.replace('<dict>', `<dict>
+            <key>NSLocationWhenInUseUsageDescription</key>
+            <string>Namaz vakitlerini hesaplamak için konum gereklidir.</string>
+            <key>NSLocationAlwaysUsageDescription</key>
+            <string>Namaz vakitlerini hesaplamak için konum gereklidir.</string>`);
+      }
+
+      fs.writeFileSync(infoPlistPath, content);
+      console.log(`✅ Info.plist güncellendi. Build No: ${buildVer}`);
+  }
+
+  // 5. Değişiklikleri Eşitle
   try {
     execSync('npx cap sync ios', { stdio: 'inherit' });
-  } catch(e) { console.log('Sync warning (ignorable)'); }
-  
-  console.log('🎉 DONE! Ready for Appflow.');
+  } catch (e) {
+    console.warn('Sync uyarısı:', e.message);
+  }
 }
 
-main().catch(console.error);
+main();
