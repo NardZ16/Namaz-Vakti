@@ -106,7 +106,22 @@ async function main() {
       fs.writeFileSync(podfilePath, podfileContent);
   }
 
-  // 4. ADIM: Sync ve Pod Install
+  // 4. ADIM: İkon ve Splash Oluşturma (Appflow Ortamında Çalışır)
+  // Windows hatasını önlemek için işlemi burada yapıyoruz.
+  if (fs.existsSync('assets/icon.png')) {
+      console.log('🎨 İkonlar oluşturuluyor (Appflow)...');
+      try {
+          // --ios bayrağı ile sadece iOS için üretim yapar, Windows hatasını bypass eder
+          execSync('npx capacitor-assets generate --ios', { stdio: 'inherit' });
+          console.log('✅ İkonlar başarıyla güncellendi.');
+      } catch (e) {
+          console.warn('⚠️ İkon oluşturulurken bir uyarı alındı (Kritik olmayabilir):', e.message);
+      }
+  } else {
+      console.log('ℹ️ assets/icon.png bulunamadı, varsayılan ikon kullanılacak.');
+  }
+
+  // 5. ADIM: Sync ve Pod Install
   try {
       console.log('🔄 Capacitor Sync ve Pod Install başlatılıyor...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
