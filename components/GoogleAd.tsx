@@ -19,13 +19,8 @@ const GoogleAd: React.FC<GoogleAdProps> = ({ slotId, className, style, format = 
     const native = isNative();
     setIsMobileApp(native);
 
-    // Logic:
-    // 1. If Web: Always push ads.
-    // 2. If Native: Only push ads if it's NOT the bottom slot (because bottom is handled by AdMob Overlay).
-    //    This allows the Top Ad to render inside the WebView as an AdSense fallback (Hybrid approach).
-    if (!native || (native && slotId !== BOTTOM_SLOT_ID)) {
-        // Wrap in setTimeout to ensure the DOM element has rendered and has width
-        // This fixes "No slot size for availableWidth=0" error
+    if (!native) {
+        // Web Mode: Push AdSense
         const timer = setTimeout(() => {
             try {
                 const adsbygoogle = (window as any).adsbygoogle || [];
@@ -33,22 +28,42 @@ const GoogleAd: React.FC<GoogleAdProps> = ({ slotId, className, style, format = 
             } catch (e) {
                 console.error("AdSense error (AdBlock might be active):", e);
             }
-        }, 500); // 500ms delay to ensure layout paint
-
+        }, 500);
         return () => clearTimeout(timer);
     }
-  }, [slotId]);
+  }, []);
 
-  // IMPORTANT: Replace this with your actual AdSense Publisher ID
   const CLIENT_ID = "ca-pub-4319080566007267"; 
 
-  // On Native Mobile App:
-  // If this is the BOTTOM ad, return null because we use the AdMob Plugin Overlay there.
-  // If this is the TOP ad, we allow it to render (Webview AdSense) so it appears in the scroll view.
-  if (isMobileApp && slotId === BOTTOM_SLOT_ID) {
-      return null;
+  // Native Mode Logic
+  if (isMobileApp) {
+      // If it's the bottom slot, render nothing (Native Overlay handles it)
+      if (slotId === BOTTOM_SLOT_ID) {
+          return null;
+      }
+
+      // If it's an inline slot (Navbar or Timer), render a beautiful Placeholder Card.
+      // Since standard AdMob Banners are Sticky/Overlay and cannot scroll with content easily,
+      // we fill this space with useful content or a "House Ad" look to keep layout consistency.
+      return (
+        <div className={`relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700 border border-teal-100 dark:border-slate-600 shadow-sm ${className}`} style={style}>
+            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')]"></div>
+            <div className="relative z-10 p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="bg-white/80 dark:bg-slate-800/80 p-1.5 rounded-lg shadow-sm">
+                        <svg className="w-5 h-5 text-teal-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold uppercase text-teal-800 dark:text-emerald-400 tracking-wider">Günün Hadisi</span>
+                        <span className="text-xs font-serif text-gray-700 dark:text-gray-200 italic">"Ameller niyetlere göredir."</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
   }
 
+  // Web Mode: Show AdSense (or placeholder if ID is missing/test)
   if (!slotId || CLIENT_ID.includes('XXX')) {
       return (
         <div className={`flex justify-center items-center overflow-hidden bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 ${className}`} style={style}>
@@ -60,7 +75,6 @@ const GoogleAd: React.FC<GoogleAdProps> = ({ slotId, className, style, format = 
   }
 
   return (
-    // Kapsayıcı Div: Kesinlikle overflow-hidden ve %100 yükseklik/genişlik
     <div className={`relative overflow-hidden flex justify-center items-center ${className}`} style={style}>
        <ins className="adsbygoogle"
             style={{ display: 'block', width: '100%', height: '100%' }}

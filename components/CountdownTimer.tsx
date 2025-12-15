@@ -62,7 +62,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
             
             <div className="flex items-center gap-3 mb-2 opacity-90">
                 <span className="h-px w-8 bg-amber-400/50"></span>
-                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">Vaktin Çıkmasına</span>
+                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">Sonraki Vakte Kalan</span>
                 <span className="h-px w-8 bg-amber-400/50"></span>
             </div>
 

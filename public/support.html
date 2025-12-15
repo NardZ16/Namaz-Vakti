@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Namaz Vakti Pro - Destek</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+        
+        <!-- Header -->
+        <div class="bg-teal-700 p-6 text-center">
+            <h1 class="text-2xl font-bold text-white mb-1">Destek Merkezi</h1>
+            <p class="text-teal-100 text-sm">Namaz Vakti Pro</p>
+        </div>
+
+        <!-- Form Container -->
+        <div class="p-8">
+            <p class="text-gray-600 text-sm mb-6 text-center">
+                Uygulama ile ilgili sorunlarınızı veya önerilerinizi aşağıdaki formu kullanarak bize iletebilirsiniz.
+            </p>
+
+            <form id="contactForm" class="space-y-4">
+                
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+                        Adınız Soyadınız
+                    </label>
+                    <input class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 bg-gray-50" 
+                           type="text" id="name" placeholder="Örn: Ahmet Yılmaz" required>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                        E-posta Adresiniz
+                    </label>
+                    <input class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 bg-gray-50" 
+                           type="email" id="email" placeholder="iletisim@ornek.com" required>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="message">
+                        Mesajınız
+                    </label>
+                    <textarea class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 bg-gray-50 h-32 resize-none" 
+                              id="message" placeholder="Sorununuzu buraya yazın..." required></textarea>
+                </div>
+
+                <!-- Type='button' yaparak sayfa yenilenmesini engelliyoruz -->
+                <button type="button" onclick="handleSend()" id="submitBtn" class="w-full bg-teal-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-700 transition duration-300 shadow-md flex items-center justify-center gap-2">
+                    <span>E-posta Oluştur ve Gönder</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </button>
+                
+                <p id="status" class="text-center text-sm font-bold mt-2 hidden"></p>
+            </form>
+        </div>
+        
+        <div class="bg-gray-50 p-4 text-center border-t border-gray-100">
+            <a href="privacy.html" class="text-xs text-gray-500 hover:text-teal-600 underline">Gizlilik Politikası</a>
+        </div>
+    </div>
+
+    <script>
+        // AYARLAR
+        // Eğer Formspree kullanacaksanız ID'yi buraya yazın (Örn: "xvndbdls")
+        // Kullanmayacaksanız "YOK" olarak bırakın, otomatik mailto çalışır.
+        var FORMSPREE_ID = "xblnbwpe"; 
+        var MY_EMAIL = "mchtaydn18@gmail.com"; 
+
+        function handleSend() {
+            var name = document.getElementById('name').value;
+            var email = document.getElementById('email').value;
+            var message = document.getElementById('message').value;
+            var btn = document.getElementById("submitBtn");
+            var status = document.getElementById("status");
+
+            if (!name || !email || !message) {
+                alert("Lütfen tüm alanları doldurunuz.");
+                return;
+            }
+
+            // 1. YÖNTEM: Mailto (Formspree ID yoksa)
+            if (FORMSPREE_ID === "YOK" || FORMSPREE_ID === "https://formspree.io/f/xblnbwpe") {
+                var subject = "Namaz Vakti Pro - Destek Talebi (" + name + ")";
+                var body = "Gönderen: " + name + "\nE-posta: " + email + "\n\n" + "Mesaj:\n" + message;
+                
+                // Güvenli mailto linki oluşturma
+                var mailtoLink = "mailto:" + MY_EMAIL + 
+                               "?subject=" + encodeURIComponent(subject) + 
+                               "&body=" + encodeURIComponent(body);
+                
+                // E-posta uygulamasını aç
+                window.location.href = mailtoLink;
+                
+                // Kullanıcıya bilgi ver
+                status.innerHTML = "E-posta uygulamanız açılıyor...";
+                status.className = "text-center text-sm font-bold mt-2 text-teal-600 block";
+                return;
+            }
+
+            // 2. YÖNTEM: Formspree (ID varsa)
+            btn.disabled = true;
+            btn.innerHTML = 'Gönderiliyor...';
+
+            var formData = new FormData();
+            formData.append("name", name);
+            formData.append("email", email);
+            formData.append("message", message);
+
+            fetch("https://formspree.io/f/" + FORMSPREE_ID, {
+                method: "POST",
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            }).then(response => {
+                if (response.ok) {
+                    status.innerHTML = "Mesajınız başarıyla gönderildi!";
+                    status.className = "text-center text-sm font-bold mt-2 text-green-600 block";
+                    document.getElementById("contactForm").reset();
+                    btn.innerHTML = 'Gönderildi';
+                } else {
+                    status.innerHTML = "Hata oluştu. Lütfen mail atmayı deneyin.";
+                    status.className = "text-center text-sm font-bold mt-2 text-red-600 block";
+                    btn.disabled = false;
+                    btn.innerHTML = 'Tekrar Dene';
+                }
+            }).catch(error => {
+                status.innerHTML = "Bağlantı hatası. Mail uygulamasını deneyin.";
+                status.className = "text-center text-sm font-bold mt-2 text-red-600 block";
+                btn.disabled = false;
+                btn.innerHTML = 'Tekrar Dene';
+            });
+        }
+    </script>
+
+</body>
+</html>

@@ -1,4 +1,6 @@
+
 import { Capacitor } from '@capacitor/core';
+import { AdMob, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 
 const isNativePlatform = (): boolean => {
   return Capacitor.isNativePlatform();
@@ -35,18 +37,51 @@ export const triggerHaptic = async (pattern: 'light' | 'medium' | 'heavy' | 'suc
 };
 
 export const initializeAds = async () => {
-    // AdMob removed
-    return Promise.resolve();
+    if (!isNativePlatform()) return;
+
+    try {
+        await AdMob.initialize({
+            requestTrackingAuthorization: true,
+            initializeForTesting: false, 
+        });
+
+        const consentInfo = await AdMob.requestConsentInfo();
+        
+        if (consentInfo.status === 'REQUIRED' || consentInfo.status === 'required') {
+            await AdMob.showConsentForm();
+        }
+
+    } catch (e) {
+        console.error("AdMob initialization warning:", e);
+    }
 };
 
 export const showBottomBanner = async () => {
-    // AdMob removed
-    return Promise.resolve();
+    if (!isNativePlatform()) return;
+
+    try {
+        const options = {
+            adId: 'ca-app-pub-4319080566007267/3273590664', 
+            adSize: BannerAdSize.ADAPTIVE_BANNER,
+            position: BannerAdPosition.BOTTOM,
+            margin: 0,
+            isTesting: false 
+        };
+
+        await AdMob.showBanner(options);
+    } catch (e) {
+        console.error("Show banner failed", e);
+    }
 };
 
 export const hideBanner = async () => {
-    // AdMob removed
-    return Promise.resolve();
+    if (isNativePlatform()) {
+        try {
+            await AdMob.hideBanner();
+        } catch (e) {
+            console.error("Hide banner failed", e);
+        }
+    }
 };
 
 export const isNative = isNativePlatform;

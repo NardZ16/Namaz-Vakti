@@ -4,8 +4,6 @@ const path = require('path');
 const https = require('https');
 
 // 👇👇👇 İKON AYARI 👇👇👇
-// Yerel dosya sorunlarını aşmak için ikonu internetten çekiyoruz.
-// İstediğiniz herhangi bir doğrudan resim linkini buraya yapıştırabilirsiniz.
 const ICON_URL = "https://i.hizliresim.com/sgt99br.png"; 
 // 👆👆👆 ---------------- 👆👆👆
 
@@ -27,7 +25,7 @@ async function downloadImage(url) {
 }
 
 async function main() {
-  console.log('--- 🌐 iOS Build Hazırlığı (Online İkon Modu) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (iPhone Only Modu) ---');
 
   // 1. Temel Klasör Kontrolleri
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -84,10 +82,9 @@ async function main() {
 
   const generateIcons = async (buffer) => {
       if (!sharp) return;
-      // Resmi önce 1024x1024 boyutuna getir, arkaplanı teal yap ve PNG formatına zorla
       const cleanBuffer = await sharp(buffer)
           .resize(1024, 1024, { fit: 'contain', background: { r: 15, g: 118, b: 110, alpha: 1 } })
-          .flatten({ background: { r: 15, g: 118, b: 110 } }) // Transparanlık varsa doldur
+          .flatten({ background: { r: 15, g: 118, b: 110 } })
           .png()
           .toBuffer();
 
@@ -107,8 +104,6 @@ async function main() {
 
   // 5. RESİM İŞLEME MANTIĞI
   let processed = false;
-
-  // A. Online Linki Dene
   if (sharp && ICON_URL && ICON_URL.startsWith('http')) {
       try {
           console.log(`🌍 Resim indiriliyor: ${ICON_URL}`);
@@ -121,7 +116,6 @@ async function main() {
       }
   }
 
-  // B. Fallback (Eğer indirme başarısızsa)
   if (!processed && sharp) {
       console.log('🔄 Yedek (Fallback) ikon oluşturuluyor...');
       try {
@@ -154,27 +148,37 @@ async function main() {
   };
   fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
 
-  // 7. Info.plist Versiyonlama
+  // 7. Info.plist Güncelleme
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
       const now = new Date();
-      // Dakikaya kadar benzersiz versiyon: YYYYMMDDHHmm
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
-      // Replace existing version
+      // Build Version Güncelle
       if (content.includes('CFBundleVersion')) {
           content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       } else {
           content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       }
 
-      // Add Encryption key if missing (App Store Connect için ŞART)
+      // Şifreleme İzni
       if (!content.includes('ITSAppUsesNonExemptEncryption')) {
           content = content.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
       }
-      
-      // Konum izinleri (Reddedilmeyi önler)
+
+      // 🚨 ÖNEMLİ: Sadece iPhone (iPad Desteğini Kapatır)
+      // UIDeviceFamily 1 = iPhone, 2 = iPad. Sadece 1 yaparak iPad zorunluluğunu kaldırıyoruz.
+      if (content.includes('UIDeviceFamily')) {
+        content = content.replace(
+            /<key>UIDeviceFamily<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/,
+            `<key>UIDeviceFamily</key>\n\t<array>\n\t\t<integer>1</integer>\n\t</array>`
+        );
+      } else {
+        content = content.replace('<dict>', `<dict>\n<key>UIDeviceFamily</key>\n<array>\n<integer>1</integer>\n</array>`);
+      }
+
+      // Konum İzinleri
       if (!content.includes('NSLocationWhenInUseUsageDescription')) {
           content = content.replace('<dict>', `<dict>
             <key>NSLocationWhenInUseUsageDescription</key>
@@ -184,12 +188,11 @@ async function main() {
       }
 
       fs.writeFileSync(infoPlistPath, content);
-      console.log(`✅ Build version güncellendi: ${buildVer}`);
+      console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
   }
 }
 
-// Hata olsa bile 0 kodu ile çık ki CI/CD durmasın
 main().catch(e => {
-    console.error("Script Hatası (Yoksayılıyor):", e);
+    console.error("Script Hatası:", e);
     process.exit(0);
 });

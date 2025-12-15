@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Geolocation } from '@capacitor/geolocation';
 import { fetchPrayerCalendar, fetchPrayerCalendarByCity, fetchCityCoordinates } from './services/aladhanService';
 import { fetchDailyVerse } from './services/geminiService';
-import { sendNotification, playNotificationSound } from './services/notificationService';
+import { initNotifications, scheduleNotification, cancelAllNotifications, sendNotification } from './services/notificationService';
 import { initializeAds, showBottomBanner } from './services/nativeService';
 import { getUpcomingHolidays } from './data/holidays';
 import CountdownTimer from './components/CountdownTimer';
@@ -17,6 +17,8 @@ import NotificationSettings from './components/NotificationSettings';
 import QiblaCompass from './components/QiblaCompass';
 import Zikirmatik from './components/Zikirmatik';
 import QuranReader from './components/QuranReader';
+import Contact from './components/Contact';
+import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
 
 const PRAYER_MAP: Record<string, string> = {
@@ -54,7 +56,10 @@ const App: React.FC = () => {
     return localStorage.getItem('theme') !== 'light';
   });
 
-  const [notifiedPrayers, setNotifiedPrayers] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // Initialize Notification Channel on App Start
+    initNotifications();
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -66,10 +71,12 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
-  // Init Native Features
+  // Init Native Features (AdMob)
   useEffect(() => {
      initializeAds().then(() => {
-        showBottomBanner();
+        setTimeout(() => {
+            showBottomBanner();
+        }, 1500);
      });
   }, []);
 
@@ -152,48 +159,45 @@ const App: React.FC = () => {
     }
   }, [prayerData, calculateNextPrayer]);
 
-  const checkNotifications = useCallback((todayData: AladhanData) => {
+  // --------------- YENİ BİLDİRİM PLANLAMA SİSTEMİ ---------------
+  const schedulePrayerNotifications = useCallback(async (data: AladhanData[]) => {
      const configStr = localStorage.getItem('notificationConfig');
-     if (!configStr) return;
+     if (!configStr || data.length === 0) return;
+     
      const config: NotificationConfig = JSON.parse(configStr);
-     
      const now = new Date();
-     const todayKey = now.toDateString(); 
-     
-     ORDERED_PRAYERS.forEach(key => {
-        const settings = config[key];
-        if (!settings?.enabled) return;
 
-        const timeStr = (todayData.timings as any)[key];
-        const parsed = parseTime(timeStr);
-        if (!parsed) return;
+     await cancelAllNotifications();
 
-        const prayerDate = new Date();
-        prayerDate.setHours(parsed.h, parsed.m, 0, 0);
+     const targetDays = data.slice(0, 3);
 
-        const diffMs = prayerDate.getTime() - now.getTime();
-        const diffMin = Math.floor(diffMs / 60000);
+     for (const dayData of targetDays) {
+        const dateParts = dayData.date.gregorian.date.split('-');
+        const day = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1; 
+        const year = parseInt(dateParts[2]);
 
-        const notificationKey = `${key}-${todayKey}`;
+        for (const key of ORDERED_PRAYERS) {
+            const settings = config[key];
+            if (!settings?.enabled) continue;
 
-        if (diffMin === settings.minutesBefore && !notifiedPrayers[notificationKey]) {
-           // Determine if sound should be system default
-           const shouldUseSystemSound = settings.sound === 'default';
+            const timeStr = (dayData.timings as any)[key];
+            const parsedTime = parseTime(timeStr);
+            if (!parsedTime) continue;
 
-           sendNotification(
-             "Namaz Vakti Hatırlatıcı", 
-             `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`,
-             shouldUseSystemSound
-           );
-           
-           if (settings.sound && settings.sound !== 'default') {
-             playNotificationSound(settings.sound);
-           }
+            const prayerDate = new Date(year, month, day, parsedTime.h, parsedTime.m, 0);
+            const notificationDate = new Date(prayerDate.getTime() - (settings.minutesBefore * 60000));
 
-           setNotifiedPrayers(prev => ({ ...prev, [notificationKey]: true }));
+            if (notificationDate.getTime() > now.getTime()) {
+                const title = "Namaz Vakti Hatırlatıcı";
+                const body = `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`;
+                const id = parseInt(notificationDate.getTime().toString().slice(-9));
+                await scheduleNotification(id, title, body, notificationDate);
+            }
         }
-     });
-  }, [notifiedPrayers]);
+     }
+  }, []);
+  // -------------------------------------------------------------
 
   useEffect(() => {
     const checkHolidayNotifications = () => {
@@ -209,18 +213,8 @@ const App: React.FC = () => {
         if (alertHoliday) {
            let msg = `${alertHoliday.name} bugün!`;
            if (alertHoliday.daysLeft === 1) msg = `${alertHoliday.name} yarın!`;
-           sendNotification("Dini Gün Hatırlatması", msg, true);
+           sendNotification("Dini Gün Hatırlatması", msg);
         }
-
-        const ramadan = holidays.find(h => h.name === "Ramazan Başlangıcı");
-        if (ramadan) {
-            if (ramadan.daysLeft === 30) {
-                sendNotification("Ramazan Yaklaşıyor!", "Mübarek Ramazan ayının başlamasına tam 30 gün (1 ay) kaldı.", true);
-            } else if (ramadan.daysLeft === 7) {
-                sendNotification("Ramazan Yaklaşıyor!", "Mübarek Ramazan ayının başlamasına son 1 hafta kaldı.", true);
-            }
-        }
-
         localStorage.setItem('last_holiday_check', today);
       }
     };
@@ -248,16 +242,12 @@ const App: React.FC = () => {
         currentCoords = { lat, lng };
       } else if (city) {
         newLocationName = district ? `${city}, ${district}` : city;
-        
         const preciseCoords = await fetchCityCoordinates(city, district || undefined);
-        if (preciseCoords) {
-             currentCoords = preciseCoords;
-        }
+        if (preciseCoords) currentCoords = preciseCoords;
 
         try {
              const queryLocation = (district && district !== 'Merkez') ? district : city;
              response = await fetchPrayerCalendarByCity(queryLocation, 'Turkey', month, year);
-             
              if (!preciseCoords && response.data && response.data[0]?.meta) {
                  currentCoords = {
                      lat: response.data[0].meta.latitude,
@@ -266,7 +256,6 @@ const App: React.FC = () => {
              }
         } catch (cityErr) {
              console.warn("City name lookup failed, falling back to coordinates", cityErr);
-             
              if (preciseCoords) {
                  response = await fetchPrayerCalendar(preciseCoords.lat, preciseCoords.lng, month, year);
              } else {
@@ -290,7 +279,6 @@ const App: React.FC = () => {
 
       if (response.code === 200 && response.data) {
         setPrayerData(response.data);
-        
         localStorage.setItem('offline_prayerData', JSON.stringify(response.data));
         localStorage.setItem('offline_locationName', newLocationName);
         localStorage.setItem('offline_timestamp', Date.now().toString());
@@ -310,14 +298,13 @@ const App: React.FC = () => {
             });
 
             calculateNextPrayer(todayData, tomorrowData);
-            checkNotifications(todayData);
+            schedulePrayerNotifications(response.data);
         }
       } else {
         setError('Namaz vakitleri alınamadı.');
       }
     } catch (err) {
       console.error("Network error, attempting offline load", err);
-      
       const cachedData = localStorage.getItem('offline_prayerData');
       const cachedLoc = localStorage.getItem('offline_locationName');
       
@@ -341,6 +328,7 @@ const App: React.FC = () => {
                 return parseInt(dPart) === tomorrowDate.getDate();
             });
             calculateNextPrayer(todayData, tomorrowData);
+            schedulePrayerNotifications(parsedData);
           }
       } else {
           setError('Veri alınırken hata oluştu ve kayıtlı veri bulunamadı.');
@@ -349,13 +337,12 @@ const App: React.FC = () => {
       setLoading(false);
       setLastFetchTime(Date.now());
     }
-  }, [calculateNextPrayer, checkNotifications]);
+  }, [calculateNextPrayer, schedulePrayerNotifications]);
 
   useEffect(() => {
     if (Date.now() - lastFetchTime > 30 * 60 * 1000 || prayerData.length === 0) {
         const savedLat = localStorage.getItem('gpsLat');
         const savedLng = localStorage.getItem('gpsLng');
-        
         if (savedLat && savedLng) {
             initApp(null, null, parseFloat(savedLat), parseFloat(savedLng));
         } else if (selectedCity) {
@@ -364,7 +351,6 @@ const App: React.FC = () => {
             initApp('Istanbul', 'Merkez'); 
         }
     }
-
     if (!verse) {
         fetchDailyVerse().then(setVerse);
     }
@@ -386,10 +372,8 @@ const App: React.FC = () => {
     localStorage.removeItem('gpsLng');
     localStorage.setItem('selectedCity', city);
     if (district) localStorage.setItem('selectedDistrict', district);
-    
     setSelectedCity(city);
     setSelectedDistrict(district || null);
-    
     initApp(city, district || null);
   };
 
@@ -400,19 +384,14 @@ const App: React.FC = () => {
         enableHighAccuracy: true,
         timeout: 10000,
       });
-
       const { latitude, longitude } = coordinates.coords;
-      
       localStorage.setItem('gpsLat', latitude.toString());
       localStorage.setItem('gpsLng', longitude.toString());
       localStorage.removeItem('selectedCity');
       localStorage.removeItem('selectedDistrict');
-      
       setSelectedCity(null);
       setSelectedDistrict(null);
-      
       initApp(null, null, latitude, longitude);
-
     } catch (err) {
       console.error("Native Geolocation Error", err);
       if (navigator.geolocation) {
@@ -441,6 +420,7 @@ const App: React.FC = () => {
 
   const closeTool = () => {
       setActiveTool(null);
+      schedulePrayerNotifications(prayerData);
   };
 
   return (
@@ -497,7 +477,8 @@ const App: React.FC = () => {
         </header>
       )}
 
-      <main className={`relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-6 overflow-y-auto pb-32 ${activeTool ? 'pt-0' : 'pt-24'}`}>
+      {/* Main Content Area: Padding adjusted for spacing. */}
+      <main className={`relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[120px] ${activeTool ? 'pt-0' : 'pt-[70px]'}`}>
         
         {!activeTool && error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
@@ -505,26 +486,27 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* YAKLAŞAN GÜN UYARISI */}
         {!activeTool && upcomingAlerts.length > 0 && (
-          <button 
-            onClick={() => setActiveTool('holidays')}
-            className="w-full relative overflow-hidden bg-gradient-to-r from-amber-500 to-orange-600 text-white p-4 rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-between group transition-transform hover:scale-[1.01]"
-          >
-             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')] opacity-10"></div>
-             <div className="relative z-10 flex items-center gap-3">
-                 <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                 </div>
-                 <div className="text-left">
-                    <div className="text-xs font-bold text-orange-100 uppercase tracking-wide">Yaklaşan Dini Gün</div>
-                    <div className="font-bold text-lg leading-tight">{upcomingAlerts[0].name}</div>
-                 </div>
-             </div>
-             <div className="relative z-10 flex flex-col items-center justify-center bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1">
-                 <span className="text-xl font-bold font-cinzel">{upcomingAlerts[0].daysLeft}</span>
-                 <span className="text-[10px] font-bold uppercase">Gün</span>
-             </div>
-          </button>
+            <button 
+                onClick={() => setActiveTool('holidays')}
+                className="w-full relative overflow-hidden bg-gradient-to-r from-amber-500 to-orange-600 text-white p-3 rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-between group transition-transform hover:scale-[1.01]"
+            >
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')] opacity-10"></div>
+                <div className="relative z-10 flex items-center gap-3">
+                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    </div>
+                    <div className="text-left">
+                        <div className="text-xs font-bold text-orange-100 uppercase tracking-wide">Yaklaşan Dini Gün</div>
+                        <div className="font-bold text-lg leading-tight">{upcomingAlerts[0].name}</div>
+                    </div>
+                </div>
+                <div className="relative z-10 flex flex-col items-center justify-center bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1">
+                    <span className="text-xl font-bold font-cinzel">{upcomingAlerts[0].daysLeft}</span>
+                    <span className="text-[10px] font-bold uppercase">Gün</span>
+                </div>
+            </button>
         )}
 
         {!activeTool && <CountdownTimer nextPrayer={nextPrayer} onExpire={handleTimerExpire} />}
@@ -542,8 +524,9 @@ const App: React.FC = () => {
 
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none pb-[env(safe-area-inset-bottom)] bg-gradient-to-t from-[#f5f2eb] dark:from-[#0c1218] to-transparent pt-4 px-4">
-         <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01] mb-2">
+      {/* Floating Bottom Nav */}
+      <div className="fixed left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-300 bottom-[50px]">
+         <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01] mx-4 mb-2">
             <button 
                 onClick={() => setActiveTool(null)}
                 className={`flex flex-col items-center gap-1 ${activeTool === null ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
@@ -568,6 +551,11 @@ const App: React.FC = () => {
                 <span className="text-[10px] font-bold">Araçlar</span>
             </button>
          </nav>
+      </div>
+
+      {/* REKLAM ALANI YER TUTUCUSU (Banner Placeholder) */}
+      <div className="fixed bottom-0 left-0 right-0 h-[50px] bg-black/10 dark:bg-white/5 backdrop-blur-sm border-t border-gray-200 dark:border-slate-700 flex items-center justify-center z-40 text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-none select-none">
+          REKLAM ALANI (BANNER)
       </div>
 
       <LocationModal 
@@ -600,6 +588,7 @@ const App: React.FC = () => {
                     {activeTool === 'holidays' && 'Dini Günler'}
                     {activeTool === 'notifications' && 'Bildirim Ayarları'}
                     {activeTool === 'dhikr' && 'Zikirmatik'}
+                    {activeTool === 'contact' && 'İletişim & Destek'}
                 </h2>
                 <div className="w-6"></div>
             </div>
@@ -608,6 +597,7 @@ const App: React.FC = () => {
                 {activeTool === 'holidays' && <HolidayCountdown />}
                 {activeTool === 'notifications' && <NotificationSettings />}
                 {activeTool === 'dhikr' && <Zikirmatik />}
+                {activeTool === 'contact' && <Contact />}
             </div>
          </div>
       )}

@@ -15,6 +15,7 @@ const MenuModal: React.FC<MenuModalProps> = ({ isOpen, onClose, onSelectTool }) 
     { id: 'notifications', name: 'Bildirimler', icon: '🔔', color: 'bg-amber-100 text-amber-700 border-amber-200' },
     { id: 'qibla', name: 'Kıble Pusulası', icon: '🧭', color: 'bg-sky-100 text-sky-700 border-sky-200' },
     { id: 'dhikr', name: 'Zikirmatik', icon: '📿', color: 'bg-rose-100 text-rose-700 border-rose-200' },
+    { id: 'contact', name: 'İletişim', icon: '📩', color: 'bg-slate-100 text-slate-700 border-slate-200' },
   ];
 
   return (
