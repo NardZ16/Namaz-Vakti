@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { NotificationConfig } from '../types';
-import { requestNotificationPermission, checkNotificationPermission } from '../services/notificationService';
+import { requestNotificationPermission, checkNotificationPermission, testNotification } from '../services/notificationService';
+import { isNative } from '../services/nativeService';
 
 const PRAYER_KEYS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const PRAYER_NAMES: Record<string, string> = {
@@ -35,7 +36,6 @@ const NotificationSettings: React.FC = () => {
   });
 
   useEffect(() => {
-    // Check initial permission state (Native aware)
     checkNotificationPermission().then(granted => {
         setPermission(granted ? 'granted' : 'default');
     });
@@ -48,6 +48,17 @@ const NotificationSettings: React.FC = () => {
   const handleRequestPermission = async () => {
     const granted = await requestNotificationPermission();
     setPermission(granted ? 'granted' : 'denied');
+  };
+
+  const handleTestNotification = async () => {
+      if (permission !== 'granted') {
+          alert("Önce bildirim izni vermelisiniz.");
+          handleRequestPermission();
+          return;
+      }
+      
+      alert("5 saniye içinde bir test bildirimi gönderilecek. Uygulamayı arka plana atıp bekleyebilirsiniz.");
+      await testNotification();
   };
 
   const togglePrayer = (key: string) => {
@@ -77,19 +88,37 @@ const NotificationSettings: React.FC = () => {
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Bildirim Ayarları</h2>
       <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Vakitlerden önce bildirim ve ses alın.</p>
 
-      {permission !== 'granted' && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl mb-6 border border-amber-200 dark:border-amber-800">
-          <p className="text-amber-800 dark:text-amber-200 mb-2 text-sm font-semibold">
-             {permission === 'denied' ? 'Bildirimler engellendi. Ayarlardan izin verin.' : 'Bildirim izni gerekli'}
-          </p>
-          <button 
-            onClick={handleRequestPermission}
-            className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-600 transition-colors"
-          >
-            Bildirimlere İzin Ver
-          </button>
-        </div>
-      )}
+      {/* İzin ve Test Alanı */}
+      <div className="bg-amber-50 dark:bg-slate-800 p-4 rounded-xl mb-6 border border-amber-200 dark:border-slate-700 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">İzin Durumu:</span>
+              <span className={`text-xs font-bold px-2 py-1 rounded ${permission === 'granted' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {permission === 'granted' ? 'İZİN VERİLDİ' : 'İZİN YOK'}
+              </span>
+          </div>
+          
+          <div className="flex gap-2">
+            {permission !== 'granted' && (
+                <button 
+                    onClick={handleRequestPermission}
+                    className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-600 transition-colors"
+                >
+                    İzin İste
+                </button>
+            )}
+            
+            {isNative() && (
+                <button 
+                    onClick={handleTestNotification}
+                    className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                    Test Et
+                </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2 italic">Test butonuna basınca 5 saniye sonra bildirim gelir.</p>
+      </div>
 
       <div className="space-y-4">
         {PRAYER_KEYS.map(key => (

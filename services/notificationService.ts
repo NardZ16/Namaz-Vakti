@@ -8,29 +8,44 @@ const CHANNEL_ID = 'namaz_vakti_channel_v1';
 export const initNotifications = async () => {
   if (Capacitor.isNativePlatform()) {
     try {
-      // Önce izin iste
-      await LocalNotifications.requestPermissions();
+      // 1. İzinleri Kontrol Et ve İste
+      const permStatus = await LocalNotifications.checkPermissions();
+      if (permStatus.display !== 'granted') {
+          await LocalNotifications.requestPermissions();
+      }
       
-      // Kanal oluştur (Android için kritik)
+      // 2. Kanal oluştur (Android için kritik)
       await LocalNotifications.createChannel({
         id: CHANNEL_ID,
         name: 'Namaz Vakti Hatırlatıcı',
         description: 'Namaz vakitleri için hatırlatmalar',
-        importance: 5, // Yüksek önem (Sesli ve titreşimli)
+        importance: 5, // Yüksek önem
         visibility: 1, // Kilit ekranında görünür
-        sound: undefined, // Varsayılan sistem sesi
+        sound: undefined, 
         vibration: true,
       });
+
+      // 3. Ön Planda Bildirim Gösterme (iOS için Kritik)
+      // Uygulama açıkken bildirim gelirse bunu alert olarak göster veya yoksayma
+      await LocalNotifications.addListener('localNotificationReceived', (notification) => {
+          console.log('Bildirim alındı (Ön Plan):', notification);
+      });
+
     } catch (e) {
-      console.error("Bildirim kanalı oluşturma hatası:", e);
+      console.error("Bildirim servisi başlatma hatası:", e);
     }
   }
 };
 
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (Capacitor.isNativePlatform()) {
-    const result = await LocalNotifications.requestPermissions();
-    return result.display === 'granted';
+    try {
+        const result = await LocalNotifications.requestPermissions();
+        return result.display === 'granted';
+    } catch (e) {
+        console.error("İzin isteme hatası:", e);
+        return false;
+    }
   } else {
     // Web Fallback
     if (!("Notification" in window)) return false;
@@ -54,16 +69,24 @@ export const checkNotificationPermission = async (): Promise<boolean> => {
 
 export const cancelAllNotifications = async () => {
     if (Capacitor.isNativePlatform()) {
-        const pending = await LocalNotifications.getPending();
-        if (pending.notifications.length > 0) {
-            await LocalNotifications.cancel(pending);
+        try {
+            const pending = await LocalNotifications.getPending();
+            if (pending.notifications.length > 0) {
+                await LocalNotifications.cancel(pending);
+            }
+        } catch (e) {
+            console.error("Bildirim iptal hatası:", e);
         }
     }
 };
 
 // Yeni Planlama Fonksiyonu (Scheduling)
 export const scheduleNotification = async (id: number, title: string, body: string, scheduleDate: Date) => {
-  if (scheduleDate.getTime() <= Date.now()) return; // Geçmiş zamanı planlama
+  // Geçmiş zaman kontrolü (1 saniye tolerans)
+  if (scheduleDate.getTime() <= Date.now() + 1000) {
+      console.warn("Geçmiş tarihli bildirim planlanamaz:", scheduleDate);
+      return; 
+  }
 
   if (Capacitor.isNativePlatform()) {
     try {
@@ -71,63 +94,49 @@ export const scheduleNotification = async (id: number, title: string, body: stri
         notifications: [{
           title,
           body,
-          id: id, // Benzersiz ID (Prayer time timestamp vb.)
+          id: id,
           schedule: { at: scheduleDate },
           channelId: CHANNEL_ID,
-          sound: undefined, // Varsayılan sistem bildirim sesi
+          sound: 'beep.wav', // iOS'te dosya yoksa default çalar
           smallIcon: 'ic_stat_icon_config_sample',
           actionTypeId: "",
           extra: null
         }]
       });
-      console.log(`Bildirim planlandı: ${title} - ${scheduleDate.toLocaleTimeString()}`);
+      console.log(`Bildirim planlandı [ID:${id}]: ${title} -> ${scheduleDate.toLocaleString()}`);
     } catch (e) {
-      console.error("Native notification error", e);
+      console.error("Bildirim planlama hatası:", e);
     }
   } else {
-    // Web'de ileri tarihli bildirim desteği yoktur, sadece konsola yazıyoruz.
-    console.log(`[WEB SIMULATION] Bildirim planlandı: ${scheduleDate} - ${title}`);
+    console.log(`[WEB SIMULATION] Bildirim planlandı: ${scheduleDate.toLocaleTimeString()} - ${title}`);
   }
 };
 
-// Anlık bildirim (Test veya manuel tetikleme için)
+// Test Bildirimi (5 Saniye Sonraya)
+export const testNotification = async () => {
+    const testDate = new Date(Date.now() + 5000); // 5 saniye sonra
+    await scheduleNotification(
+        99999, 
+        "Test Bildirimi", 
+        "Bu bildirim çalışıyorsa ayarlarınız doğrudur.", 
+        testDate
+    );
+    return testDate;
+};
+
+// Anlık bildirim
 export const sendNotification = async (title: string, body: string) => {
     if (Capacitor.isNativePlatform()) {
         await LocalNotifications.schedule({
             notifications: [{
                 title,
                 body,
-                id: new Date().getTime() % 2147483647,
-                schedule: { at: new Date(Date.now() + 100) },
+                id: Math.floor(Date.now() / 1000), // Unique ID
+                schedule: { at: new Date(Date.now() + 1000) }, // 1 sn sonra
                 channelId: CHANNEL_ID,
             }]
         });
     } else if (Notification.permission === "granted") {
-        new Notification(title, { body, icon: '/favicon.ico' });
+        new Notification(title, { body });
     }
-};
-
-// Uygulama içi ses oynatma (Opsiyonel - Sadece uygulama açıkken çalışır)
-export const playNotificationSound = (soundType: string) => {
-  let audioSrc = '';
-  switch (soundType) {
-    case 'adhan': audioSrc = 'https://media.islamway.net/several/305/03_Athan_Makkah.mp3'; break;
-    case 'water': audioSrc = 'https://actions.google.com/sounds/v1/water/stream_flowing.ogg'; break;
-    case 'bird': audioSrc = 'https://actions.google.com/sounds/v1/animals/sparrow_chirp.ogg'; break;
-    case 'beep': audioSrc = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg'; break;
-    default: return; 
-  }
-
-  if (audioSrc) {
-    try {
-      const audio = new Audio(audioSrc);
-      audio.volume = 0.7;
-      audio.play().catch(e => console.warn("Audio play failed:", e));
-      if (soundType === 'adhan') {
-          setTimeout(() => audio.pause(), 15000);
-      }
-    } catch (error) {
-      console.error("Audio playback error", error);
-    }
-  }
 };
