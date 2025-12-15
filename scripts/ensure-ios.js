@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const { execSync } = require('child_process');
 const path = require('path');
@@ -187,9 +188,37 @@ async function main() {
             <string>Namaz vakitleri için konum gereklidir.</string>`);
       }
 
+      // AdMob ID Ekleme (Info.plist'e GADApplicationIdentifier)
+      if (!content.includes('GADApplicationIdentifier')) {
+        content = content.replace('<dict>', `<dict>
+            <key>GADApplicationIdentifier</key>
+            <string>ca-app-pub-4319080566007267~4413348107</string>`);
+      }
+      // Not: SKAdNetworkItems reklam ağları için gerekebilir ama şimdilik ID yeterli.
+
       fs.writeFileSync(infoPlistPath, content);
       console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
   }
+
+  // 8. Podfile Düzenleme (AdMob Sürüm Sabitleme)
+  const podfilePath = path.join('ios', 'App', 'Podfile');
+  if (fs.existsSync(podfilePath)) {
+      let podfileContent = fs.readFileSync(podfilePath, 'utf8');
+      
+      // Google-Mobile-Ads-SDK sürümünü 10.14.0'a sabitliyoruz.
+      // v11.0.0+ sürümü UMP SDK'da breaking change (isim değişiklikleri) içeriyor.
+      // Mevcut admob plugin'i eski isimlendirmeyi kullandığı için v10 serisinde kalmalıyız.
+      if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
+          console.log("🔧 Podfile: Google-Mobile-Ads-SDK sürümü 10.14.0'a sabitleniyor...");
+          // 'target 'App' do' satırını bulup altına pod tanımını ekliyoruz
+          podfileContent = podfileContent.replace(
+              /target 'App' do/g, 
+              "target 'App' do\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
+          );
+          fs.writeFileSync(podfilePath, podfileContent);
+      }
+  }
+
 }
 
 main().catch(e => {
