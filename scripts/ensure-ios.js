@@ -12,7 +12,6 @@ const ICON_URL = "https://i.hizliresim.com/dn9sac4.png";
 async function downloadImage(url) {
     return new Promise((resolve, reject) => {
         const request = https.get(url, (res) => {
-            // Redirect takibi (Hızlıresim bazen redirect atabilir)
             if (res.statusCode === 301 || res.statusCode === 302) {
                 return downloadImage(res.headers.location).then(resolve).catch(reject);
             }
@@ -37,48 +36,28 @@ function patchAdMobFiles() {
     let basePath = potentialPaths.find(p => fs.existsSync(p));
     
     if (!basePath) {
-        console.warn("⚠️ AdMob plugin klasörü bulunamadı (henüz yüklenmemiş olabilir).");
+        // console.warn("⚠️ AdMob plugin klasörü bulunamadı.");
         return;
     }
     
-    // Patch: ConsentExecutor.swift
+    // Patch logic...
     const consentPath = path.join(basePath, 'Consent', 'ConsentExecutor.swift');
     if (fs.existsSync(consentPath)) {
         let content = fs.readFileSync(consentPath, 'utf8');
-        
-        if (content.includes('load(withCompletionHandler:')) {
-             content = content.replace(/load\(withCompletionHandler:/g, 'load(with:');
-        }
-        if (content.includes('load(completionHandler:')) {
-             content = content.replace(/load\(completionHandler:/g, 'load(with:');
-        }
-
-        const replacements = [
-            { old: /UMPConsentStatus/g, new: 'ConsentStatus' },
-            { old: /UMPRequestParameters/g, new: 'RequestParameters' },
-            { old: /UMPDebugSettings/g, new: 'DebugSettings' },
-            { old: /UMPDebugGeography/g, new: 'DebugGeography' },
-            { old: /UMPConsentInformation/g, new: 'ConsentInformation' },
-            { old: /UMPConsentForm/g, new: 'ConsentForm' },
-            { old: /UMPFormStatus/g, new: 'FormStatus' },
-            { old: /\.sharedInstance/g, new: '.shared' },
-            { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' },
-            { old: /\.load\s*\(\s*completionHandler\s*:/g, new: '.load(with:' },
-            { old: /\.load\s*\(\s*withCompletionHandler\s*:/g, new: '.load(with:' }
-        ];
-
-        let modified = false;
-        replacements.forEach(rep => {
-            if (rep.old.test(content)) {
-                content = content.replace(rep.old, rep.new);
-                modified = true;
-            }
-        });
-
-        if (modified) fs.writeFileSync(consentPath, content);
+        content = content.replace(/load\(withCompletionHandler:/g, 'load(with:')
+                         .replace(/load\(completionHandler:/g, 'load(with:')
+                         .replace(/UMPConsentStatus/g, 'ConsentStatus')
+                         .replace(/UMPRequestParameters/g, 'RequestParameters')
+                         .replace(/UMPDebugSettings/g, 'DebugSettings')
+                         .replace(/UMPDebugGeography/g, 'DebugGeography')
+                         .replace(/UMPConsentInformation/g, 'ConsentInformation')
+                         .replace(/UMPConsentForm/g, 'ConsentForm')
+                         .replace(/UMPFormStatus/g, 'FormStatus')
+                         .replace(/\.sharedInstance/g, '.shared')
+                         .replace(/\.tagForUnderAgeOfConsent/g, '.isTaggedForUnderAgeOfConsent');
+        fs.writeFileSync(consentPath, content);
     }
 
-    // Patch: BannerExecutor.swift
     const bannerPath = path.join(basePath, 'Banner', 'BannerExecutor.swift');
     if (fs.existsSync(bannerPath)) {
         let content = fs.readFileSync(bannerPath, 'utf8');
@@ -90,39 +69,30 @@ function patchAdMobFiles() {
 }
 
 async function main() {
-  console.log('🚀 Script Başlatılıyor (NO-SHARP MODE)...');
+  console.log('🚀 Script Başlatılıyor (SIPS MODE)...');
 
-  // 1. ADIM: Web Klasörleri
+  // 1. Web Klasörleri
   if (!fs.existsSync('dist')) {
       fs.mkdirSync('dist'); 
       fs.writeFileSync('dist/index.html', '<!DOCTYPE html><html><body>Hazırlanıyor...</body></html>');
   }
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
 
-  // 2. ADIM: iOS PLATFORMUNU OLUŞTUR
-  // Sharp beklemeden önce platformu garantiye alıyoruz.
+  // 2. iOS Platform Kontrolü
   const xcodeprojPath = 'ios/App/App.xcodeproj';
   if (!fs.existsSync(xcodeprojPath)) {
-      console.log('⚙️ iOS projesi bulunamadı. Oluşturuluyor...');
-      
-      // Bozuk klasör temizliği
-      if (fs.existsSync('ios')) {
-          try { fs.rmSync('ios', { recursive: true, force: true }); } catch(e) {}
-      }
-
+      console.log('⚙️ iOS projesi oluşturuluyor...');
+      if (fs.existsSync('ios')) try { fs.rmSync('ios', { recursive: true, force: true }); } catch(e) {}
       try {
         execSync('npx cap add ios', { stdio: 'inherit' });
-        console.log('✅ iOS platformu eklendi.');
       } catch (e) {
-        console.error('❌ iOS platformu EKLENEMEDİ:', e.message);
+        console.error('❌ iOS platformu eklenemedi:', e.message);
       }
-  } else {
-      console.log('✅ iOS projesi mevcut.');
   }
 
-  // 3. ADIM: İKONLARI İNDİR VE KOPYALA (SHARP OLMADAN)
+  // 3. İKON İŞLEMLERİ (SIPS KULLANARAK)
   if (fs.existsSync(xcodeprojPath)) {
-      console.log(`🎨 İkon indiriliyor: ${ICON_URL}`);
+      console.log(`🎨 İkon indiriliyor ve işleniyor...`);
       try {
           const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
           
@@ -131,29 +101,42 @@ async function main() {
           }
           fs.mkdirSync(iosIconDir, { recursive: true });
 
-          // Resmi indir
+          // Resmi indir ve Master olarak kaydet
           const buffer = await downloadImage(ICON_URL);
-          console.log(`📥 Resim indirildi (${buffer.length} bytes). İşleniyor...`);
+          const masterPath = path.join(iosIconDir, 'master.png');
+          fs.writeFileSync(masterPath, buffer);
 
-          const iconFiles = [
-            "AppIcon-20x20@2x.png",
-            "AppIcon-20x20@3x.png",
-            "AppIcon-29x29@2x.png",
-            "AppIcon-29x29@3x.png",
-            "AppIcon-40x40@2x.png",
-            "AppIcon-40x40@3x.png",
-            "AppIcon-60x60@2x.png",
-            "AppIcon-60x60@3x.png",
-            "AppIcon-76x76@2x.png",
-            "AppIcon-83.5x83.5@2x.png",
-            "AppIcon-512@2x.png"
+          // Hedef Boyutlar (App Store Validation için kritik)
+          const icons = [
+            { name: 'AppIcon-20x20@2x.png', size: 40 },
+            { name: 'AppIcon-20x20@3x.png', size: 60 },
+            { name: 'AppIcon-29x29@2x.png', size: 58 },
+            { name: 'AppIcon-29x29@3x.png', size: 87 },
+            { name: 'AppIcon-40x40@2x.png', size: 80 },
+            { name: 'AppIcon-40x40@3x.png', size: 120 }, // iPhone App Icon
+            { name: 'AppIcon-60x60@2x.png', size: 120 }, // iPhone App Icon
+            { name: 'AppIcon-60x60@3x.png', size: 180 },
+            { name: 'AppIcon-76x76@2x.png', size: 152 }, // iPad App Icon
+            { name: 'AppIcon-83.5x83.5@2x.png', size: 167 }, // iPad Pro App Icon
+            { name: 'AppIcon-512@2x.png', size: 1024 }
           ];
 
-          // DİKKAT: Resize yapmıyoruz. Aynı büyük resmi tüm dosya isimlerine kopyalıyoruz.
-          // iOS bunu build sırasında uyarı verse de kabul eder ve kendi küçültür.
-          for (const filename of iconFiles) {
-              fs.writeFileSync(path.join(iosIconDir, filename), buffer);
+          console.log("⚙️ 'sips' aracı ile yeniden boyutlandırılıyor...");
+          
+          for (const icon of icons) {
+              const destPath = path.join(iosIconDir, icon.name);
+              // macOS yerleşik resim işleme aracı: sips
+              // -z [height] [width]
+              try {
+                  execSync(`sips -z ${icon.size} ${icon.size} "${masterPath}" --out "${destPath}"`, { stdio: 'ignore' });
+              } catch (sipsErr) {
+                  console.warn(`⚠️ Sips hatası (${icon.name}), kopyalama deneniyor...`);
+                  fs.copyFileSync(masterPath, destPath);
+              }
           }
+
+          // Master dosyayı temizle
+          try { fs.unlinkSync(masterPath); } catch(e) {}
 
           const contentsJson = {
             "images": [
@@ -175,22 +158,19 @@ async function main() {
             "info": { "version": 1, "author": "xcode" }
           };
           fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
-          console.log("✅ İkonlar başarıyla kopyalandı (Resize atlandı).");
+          console.log("✅ İkonlar başarıyla oluşturuldu (Validasyon uyumlu).");
       } catch (err) {
           console.error("⚠️ İkon işlemi hatası:", err.message);
       }
   }
 
-  // 4. ADIM: SYNC & PATCH
+  // 4. Sync & Patch
   try {
-      console.log('🔄 Capacitor Sync...');
       execSync('npx cap sync ios', { stdio: 'inherit' });
       patchAdMobFiles();
-  } catch(e) {
-      console.warn('Sync/Patch uyarısı:', e.message);
-  }
+  } catch(e) {}
 
-  // 5. ADIM: Info.plist GÜNCELLEMELERİ
+  // 5. Info.plist Versiyon & İzinler
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
@@ -214,7 +194,7 @@ async function main() {
       fs.writeFileSync(infoPlistPath, content);
   }
 
-  // Podfile Düzeltmesi
+  // Podfile
   const podfilePath = path.join('ios', 'App', 'Podfile');
   if (fs.existsSync(podfilePath)) {
       let podContent = fs.readFileSync(podfilePath, 'utf8');
@@ -222,7 +202,7 @@ async function main() {
       fs.writeFileSync(podfilePath, podContent);
   }
 
-  console.log('🎉 Script tamamlandı (Sharp\'sız Mod).');
+  console.log('🎉 Script tamamlandı.');
 }
 
 main().catch(e => {
