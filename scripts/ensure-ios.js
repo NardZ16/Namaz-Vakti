@@ -26,7 +26,7 @@ async function downloadImage(url) {
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Safe Mode) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (iOS 13.0 + SDK v11 Auto) ---');
 
   // 1. Temel Klasör Kontrolleri
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -46,7 +46,7 @@ async function main() {
       }
   }
 
-  // 3. Sharp Yükle (Dinamik)
+  // 3. Sharp Yükle (Dinamik - Hata verirse atlar)
   let sharp;
   try {
       sharp = require('sharp');
@@ -61,8 +61,7 @@ async function main() {
       }
   }
 
-  // 4. İkon İşlemleri (Sadece Sharp varsa çalışır)
-  // Sharp yoksa bu blok tamamen atlanır, böylece varsayılan Capacitor ikonları silinmez ve build bozulmaz.
+  // 4. İkon İşlemleri
   if (sharp) {
       console.log('🎨 İkonlar güncelleniyor...');
       const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
@@ -131,7 +130,6 @@ async function main() {
           }
       }
 
-      // Contents.json Oluştur (Sadece ikonlar oluşturulduysa)
       const contentsJson = {
         "images": [
           { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
@@ -175,7 +173,7 @@ async function main() {
           content = content.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
       }
 
-      // 🚨 ÖNEMLİ: Sadece iPhone
+      // Sadece iPhone
       if (content.includes('UIDeviceFamily')) {
         content = content.replace(
             /<key>UIDeviceFamily<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/,
@@ -205,11 +203,11 @@ async function main() {
       console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
   }
 
-  // 6. Podfile Düzenleme (AdMob Sürüm Sabitleme - SDK v10.14.0)
+  // 6. Podfile Düzenleme
   const podfilePath = path.join('ios', 'App', 'Podfile');
   const podLockPath = path.join('ios', 'App', 'Podfile.lock');
 
-  // KRİTİK: Podfile.lock silinmeli ki sürüm düşürme (downgrade) etkili olsun.
+  // KRİTİK: Podfile.lock silinmeli
   if (fs.existsSync(podLockPath)) {
       console.log("🧹 Temizlik: Podfile.lock siliniyor (Versiyon çakışmasını önlemek için)...");
       fs.unlinkSync(podLockPath);
@@ -218,20 +216,24 @@ async function main() {
   if (fs.existsSync(podfilePath)) {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
       
-      // Google-Mobile-Ads-SDK sürümünü 10.14.0'a sabitliyoruz.
-      if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
-          console.log("🔧 Podfile: Google-Mobile-Ads-SDK sürümü 10.14.0'a sabitleniyor...");
-          
-          const targetRegex = /target\s+['"]App['"]\s+do/g;
-          
-          if (targetRegex.test(podfileContent)) {
-              podfileContent = podfileContent.replace(
-                  targetRegex, 
-                  "target 'App' do\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
-              );
-              fs.writeFileSync(podfilePath, podfileContent);
-          }
+      // 1. Platform Sürümünü Güncelle (iOS 13.0 Minimum - AdMob SDK 11+ için gerekli)
+      if (podfileContent.includes("platform :ios")) {
+          podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
+      } else {
+          podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
+      
+      // 2. Eski Pinleme Kodunu Temizle (Plugin 11.3.0 istiyorsa onu alsın)
+      if (podfileContent.includes("pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'")) {
+           console.log("🔧 Podfile: Eski SDK sabitlemesi kaldırılıyor (Plugin uyumluluğu için)...");
+           podfileContent = podfileContent.replace(/pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'/g, "");
+      }
+
+      // Boş satırları temizle
+      podfileContent = podfileContent.replace(/^\s*[\r\n]/gm, "");
+      
+      fs.writeFileSync(podfilePath, podfileContent);
+      console.log("✅ Podfile güncellendi: Platform iOS 13.0");
   }
 
 }
