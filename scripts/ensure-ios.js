@@ -26,7 +26,7 @@ async function downloadImage(url) {
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Plugin v6.0.0 + SDK v10.14.0) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Safe Mode) ---');
 
   // 1. Temel Klasör Kontrolleri
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -46,110 +46,117 @@ async function main() {
       }
   }
 
-  // 3. Sharp Yükle
+  // 3. Sharp Yükle (Dinamik)
   let sharp;
   try {
       sharp = require('sharp');
   } catch (e) {
-      console.log('📦 Sharp yükleniyor...');
+      console.log('📦 Sharp modülü eksik, yüklenmeye çalışılıyor...');
       try {
+        // --no-save ile package.json'ı kirletmeden kurmayı dener
         execSync('npm install sharp --no-save', { stdio: 'inherit' });
         sharp = require('sharp');
       } catch (err) {
-        console.warn('⚠️ Sharp yüklenemedi. İkon işlemi atlanabilir.');
+        console.warn('⚠️ Sharp yüklenemedi. İkon oluşturma işlemi ATLANACAK. (Varsayılan ikonlar kullanılacak)');
       }
   }
 
-  // 4. İkon Hedef Klasörü Hazırla
-  const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
-  if (fs.existsSync(iosIconDir)) {
-      try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e) {}
-  }
-  fs.mkdirSync(iosIconDir, { recursive: true });
-
-  const iconSizes = [
-      { name: 'AppIcon-20x20@2x.png', size: 40 },
-      { name: 'AppIcon-20x20@3x.png', size: 60 },
-      { name: 'AppIcon-29x29@2x.png', size: 58 },
-      { name: 'AppIcon-29x29@3x.png', size: 87 },
-      { name: 'AppIcon-40x40@2x.png', size: 80 },
-      { name: 'AppIcon-40x40@3x.png', size: 120 },
-      { name: 'AppIcon-60x60@2x.png', size: 120 },
-      { name: 'AppIcon-60x60@3x.png', size: 180 },
-      { name: 'AppIcon-76x76@2x.png', size: 152 },
-      { name: 'AppIcon-83.5x83.5@2x.png', size: 167 },
-      { name: 'AppIcon-512@2x.png', size: 1024 }
-  ];
-
-  const generateIcons = async (buffer) => {
-      if (!sharp) return;
-      const cleanBuffer = await sharp(buffer)
-          .resize(1024, 1024, { fit: 'contain', background: { r: 15, g: 118, b: 110, alpha: 1 } })
-          .flatten({ background: { r: 15, g: 118, b: 110 } })
-          .png()
-          .toBuffer();
-
-      for (const icon of iconSizes) {
-          await sharp(cleanBuffer)
-            .resize(icon.size, icon.size, { fit: 'cover' })
-            .png()
-            .toFile(path.join(iosIconDir, icon.name));
+  // 4. İkon İşlemleri (Sadece Sharp varsa çalışır)
+  // Sharp yoksa bu blok tamamen atlanır, böylece varsayılan Capacitor ikonları silinmez ve build bozulmaz.
+  if (sharp) {
+      console.log('🎨 İkonlar güncelleniyor...');
+      const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
+      
+      // Klasörü temizle ve yeniden oluştur
+      if (fs.existsSync(iosIconDir)) {
+          try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e) {}
       }
-  };
+      fs.mkdirSync(iosIconDir, { recursive: true });
 
-  const fallbackSvg = `
-  <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-    <rect width="1024" height="1024" fill="#0f766e"/>
-    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="500" fill="white" font-weight="bold">N</text>
-  </svg>`;
+      const iconSizes = [
+          { name: 'AppIcon-20x20@2x.png', size: 40 },
+          { name: 'AppIcon-20x20@3x.png', size: 60 },
+          { name: 'AppIcon-29x29@2x.png', size: 58 },
+          { name: 'AppIcon-29x29@3x.png', size: 87 },
+          { name: 'AppIcon-40x40@2x.png', size: 80 },
+          { name: 'AppIcon-40x40@3x.png', size: 120 },
+          { name: 'AppIcon-60x60@2x.png', size: 120 },
+          { name: 'AppIcon-60x60@3x.png', size: 180 },
+          { name: 'AppIcon-76x76@2x.png', size: 152 },
+          { name: 'AppIcon-83.5x83.5@2x.png', size: 167 },
+          { name: 'AppIcon-512@2x.png', size: 1024 }
+      ];
 
-  // 5. RESİM İŞLEME MANTIĞI
-  let processed = false;
-  if (sharp && ICON_URL && ICON_URL.startsWith('http')) {
-      try {
-          console.log(`🌍 Resim indiriliyor: ${ICON_URL}`);
-          const downloadedBuffer = await downloadImage(ICON_URL);
-          await generateIcons(downloadedBuffer);
-          console.log('✅ Online resim indirildi ve ikon yapıldı.');
-          processed = true;
-      } catch (err) {
-          console.warn(`⚠️ Online resim indirilemedi: ${err.message}.`);
+      const generateIcons = async (buffer) => {
+          const cleanBuffer = await sharp(buffer)
+              .resize(1024, 1024, { fit: 'contain', background: { r: 15, g: 118, b: 110, alpha: 1 } })
+              .flatten({ background: { r: 15, g: 118, b: 110 } })
+              .png()
+              .toBuffer();
+
+          for (const icon of iconSizes) {
+              await sharp(cleanBuffer)
+                .resize(icon.size, icon.size, { fit: 'cover' })
+                .png()
+                .toFile(path.join(iosIconDir, icon.name));
+          }
+      };
+
+      const fallbackSvg = `
+      <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <rect width="1024" height="1024" fill="#0f766e"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="500" fill="white" font-weight="bold">N</text>
+      </svg>`;
+
+      let processed = false;
+      if (ICON_URL && ICON_URL.startsWith('http')) {
+          try {
+              console.log(`🌍 Resim indiriliyor: ${ICON_URL}`);
+              const downloadedBuffer = await downloadImage(ICON_URL);
+              await generateIcons(downloadedBuffer);
+              console.log('✅ Online resim indirildi ve ikon yapıldı.');
+              processed = true;
+          } catch (err) {
+              console.warn(`⚠️ Online resim indirilemedi: ${err.message}.`);
+          }
       }
+
+      if (!processed) {
+          console.log('🔄 Yedek (Fallback) ikon oluşturuluyor...');
+          try {
+              await generateIcons(Buffer.from(fallbackSvg));
+              console.log('✅ Yedek ikon oluşturuldu.');
+          } catch (e) {
+              console.error('❌ İkon oluşturulamadı, ancak build devam edecek.', e.message);
+          }
+      }
+
+      // Contents.json Oluştur (Sadece ikonlar oluşturulduysa)
+      const contentsJson = {
+        "images": [
+          { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
+          { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@3x.png", "scale": "3x" },
+          { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@2x.png", "scale": "2x" },
+          { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@3x.png", "scale": "3x" },
+          { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@2x.png", "scale": "2x" },
+          { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@3x.png", "scale": "3x" },
+          { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@2x.png", "scale": "2x" },
+          { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@3x.png", "scale": "3x" },
+          { "size": "20x20", "idiom": "ipad", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
+          { "size": "29x29", "idiom": "ipad", "filename": "AppIcon-29x29@2x.png", "scale": "2x" },
+          { "size": "40x40", "idiom": "ipad", "filename": "AppIcon-40x40@2x.png", "scale": "2x" },
+          { "size": "76x76", "idiom": "ipad", "filename": "AppIcon-76x76@2x.png", "scale": "2x" },
+          { "size": "83.5x83.5", "idiom": "ipad", "filename": "AppIcon-83.5x83.5@2x.png", "scale": "2x" },
+          { "size": "1024x1024", "idiom": "ios-marketing", "filename": "AppIcon-512@2x.png", "scale": "1x" }
+        ],
+        "info": { "version": 1, "author": "xcode" }
+      };
+      fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
+  } else {
+      console.log('⏩ İkon oluşturma adımı atlandı (Sharp modülü yok).');
   }
 
-  if (!processed && sharp) {
-      console.log('🔄 Yedek (Fallback) ikon oluşturuluyor...');
-      try {
-          await generateIcons(Buffer.from(fallbackSvg));
-          console.log('✅ Yedek ikon oluşturuldu.');
-      } catch (e) {
-          console.error('❌ İkon oluşturulamadı (Build devam edecek).', e.message);
-      }
-  }
-
-  // 6. Contents.json Oluştur
-  const contentsJson = {
-    "images": [
-      { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
-      { "size": "20x20", "idiom": "iphone", "filename": "AppIcon-20x20@3x.png", "scale": "3x" },
-      { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@2x.png", "scale": "2x" },
-      { "size": "29x29", "idiom": "iphone", "filename": "AppIcon-29x29@3x.png", "scale": "3x" },
-      { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@2x.png", "scale": "2x" },
-      { "size": "40x40", "idiom": "iphone", "filename": "AppIcon-40x40@3x.png", "scale": "3x" },
-      { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@2x.png", "scale": "2x" },
-      { "size": "60x60", "idiom": "iphone", "filename": "AppIcon-60x60@3x.png", "scale": "3x" },
-      { "size": "20x20", "idiom": "ipad", "filename": "AppIcon-20x20@2x.png", "scale": "2x" },
-      { "size": "29x29", "idiom": "ipad", "filename": "AppIcon-29x29@2x.png", "scale": "2x" },
-      { "size": "40x40", "idiom": "ipad", "filename": "AppIcon-40x40@2x.png", "scale": "2x" },
-      { "size": "76x76", "idiom": "ipad", "filename": "AppIcon-76x76@2x.png", "scale": "2x" },
-      { "size": "83.5x83.5", "idiom": "ipad", "filename": "AppIcon-83.5x83.5@2x.png", "scale": "2x" },
-      { "size": "1024x1024", "idiom": "ios-marketing", "filename": "AppIcon-512@2x.png", "scale": "1x" }
-    ],
-    "info": { "version": 1, "author": "xcode" }
-  };
-  fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
-
-  // 7. Info.plist Güncelleme
+  // 5. Info.plist Güncelleme
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
@@ -187,7 +194,7 @@ async function main() {
             <string>Namaz vakitleri için konum gereklidir.</string>`);
       }
 
-      // AdMob ID (Info.plist GADApplicationIdentifier)
+      // AdMob ID
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
             <key>GADApplicationIdentifier</key>
@@ -198,7 +205,7 @@ async function main() {
       console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
   }
 
-  // 8. Podfile Düzenleme (AdMob Sürüm Sabitleme)
+  // 6. Podfile Düzenleme (AdMob Sürüm Sabitleme - SDK v10.14.0)
   const podfilePath = path.join('ios', 'App', 'Podfile');
   const podLockPath = path.join('ios', 'App', 'Podfile.lock');
 
@@ -212,7 +219,6 @@ async function main() {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
       
       // Google-Mobile-Ads-SDK sürümünü 10.14.0'a sabitliyoruz.
-      // Admob Plugin v6.0.0 ile SDK v10.14.0 uyumludur.
       if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
           console.log("🔧 Podfile: Google-Mobile-Ads-SDK sürümü 10.14.0'a sabitleniyor...");
           
