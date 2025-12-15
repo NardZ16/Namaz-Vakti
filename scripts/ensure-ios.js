@@ -25,8 +25,52 @@ async function downloadImage(url) {
     });
 }
 
+// 🚑 AdMob Plugin Patch Fonksiyonu (Manuel Düzeltme)
+function patchAdMobFiles() {
+    const consentPath = path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Plugin', 'Consent', 'ConsentExecutor.swift');
+    
+    if (fs.existsSync(consentPath)) {
+        console.log("🚑 AdMob Plugin: 'ConsentExecutor.swift' SDK v11 uyumluluğu için patchleniyor...");
+        let content = fs.readFileSync(consentPath, 'utf8');
+        
+        // 1. Sınıf İsim Değişiklikleri
+        const replacements = [
+            { old: /UMPConsentStatus/g, new: 'ConsentStatus' },
+            { old: /UMPRequestParameters/g, new: 'RequestParameters' },
+            { old: /UMPDebugSettings/g, new: 'DebugSettings' },
+            { old: /UMPDebugGeography/g, new: 'DebugGeography' },
+            { old: /UMPConsentInformation/g, new: 'ConsentInformation' },
+            { old: /UMPConsentForm/g, new: 'ConsentForm' },
+            { old: /UMPFormStatus/g, new: 'FormStatus' },
+            // 2. Özellik İsim Değişiklikleri
+            { old: /\.sharedInstance/g, new: '.shared' },
+            { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' }
+        ];
+
+        let modified = false;
+        replacements.forEach(rep => {
+            if (rep.old.test(content)) {
+                content = content.replace(rep.old, rep.new);
+                modified = true;
+            }
+        });
+
+        if (modified) {
+            fs.writeFileSync(consentPath, content);
+            console.log("✅ ConsentExecutor.swift başarıyla güncellendi.");
+        } else {
+            console.log("ℹ️ ConsentExecutor.swift zaten güncel veya eşleşme bulunamadı.");
+        }
+    } else {
+        console.warn("⚠️ AdMob plugin dosyası bulunamadı (npm install çalıştı mı?).");
+    }
+}
+
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Final Fix) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Manuel Patch Modu) ---');
+
+  // 0. ÖNCE PATCH İŞLEMİNİ YAP (Pod Install'dan önce kodun düzelmesi lazım)
+  patchAdMobFiles();
 
   // 1. Temel Klasör Kontrolleri
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -44,6 +88,8 @@ async function main() {
       } catch (e) {
         console.warn('⚠️ iOS platformu eklenirken uyarı:', e.message);
       }
+      // Platform yeni eklendiyse patch'i tekrar çalıştır (dosyalar yeni gelmiş olabilir)
+      patchAdMobFiles();
   }
 
   // 3. Sharp Yükle (Dinamik)
@@ -207,28 +253,28 @@ async function main() {
   const podLockPath = path.join('ios', 'App', 'Podfile.lock');
   const podsDir = path.join('ios', 'App', 'Pods');
 
-  // KRİTİK TEMİZLİK: Eski SDK kalıntılarını tamamen sil
+  // Eski kalıntıları temizle
   if (fs.existsSync(podLockPath)) {
       console.log("🧹 Podfile.lock siliniyor...");
       try { fs.unlinkSync(podLockPath); } catch(e) {}
   }
   
   if (fs.existsSync(podsDir)) {
-      console.log("🧹 Pods klasörü siliniyor (Temiz kurulum için)...");
+      console.log("🧹 Pods klasörü siliniyor...");
       try { fs.rmSync(podsDir, { recursive: true, force: true }); } catch(e) {}
   }
 
   if (fs.existsSync(podfilePath)) {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
       
-      // 1. Platform Sürümü: iOS 13.0 (SDK 11 için zorunlu)
+      // Platform Sürümü
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
           podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
       
-      // 2. Eski SDK Sabitlemelerini Kaldır
+      // Eski SDK sabitlemelerini temizle
       if (podfileContent.includes("Google-Mobile-Ads-SDK")) {
            console.log("🔧 Podfile: Eski SDK kısıtlamaları temizleniyor...");
            podfileContent = podfileContent.replace(/.*pod 'Google-Mobile-Ads-SDK'.*/g, "");
@@ -237,7 +283,7 @@ async function main() {
       podfileContent = podfileContent.replace(/^\s*[\r\n]/gm, "");
       
       fs.writeFileSync(podfilePath, podfileContent);
-      console.log("✅ Podfile güncellendi: Platform iOS 13.0, Clean Install Modu");
+      console.log("✅ Podfile güncellendi: iOS 13.0");
   }
 
 }
