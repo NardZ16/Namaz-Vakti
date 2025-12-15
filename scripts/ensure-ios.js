@@ -46,6 +46,12 @@ function patchAdMobFiles() {
     const consentPath = path.join(basePath, 'Consent', 'ConsentExecutor.swift');
     if (fs.existsSync(consentPath)) {
         let content = fs.readFileSync(consentPath, 'utf8');
+        
+        // Önceki denemelerden kalan hatalı patchleri temizle
+        if (content.includes('load(withCompletionHandler:')) {
+            content = content.replace(/load\(withCompletionHandler:/g, 'load(completionHandler:');
+        }
+
         const replacements = [
             // Sınıf İsimleri
             { old: /UMPConsentStatus/g, new: 'ConsentStatus' },
@@ -58,26 +64,11 @@ function patchAdMobFiles() {
             // Özellikler
             { old: /\.sharedInstance/g, new: '.shared' },
             { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' },
+            
             // 🚨 KRİTİK FİX: load metodu parametre hatası (expected 'with:')
-            { old: /\.load\(completionHandler:/g, new: '.load(withCompletionHandler:' } 
+            // Derleyici 'with' istiyorsa, metod imzası muhtemelen 'load(with: ...)' şeklindedir.
+            { old: /\.load\(completionHandler:/g, new: '.load(with:' } 
         ];
-
-        /* 
-           Not: Derleyici "expected 'with:'" diyorsa genellikle "withCompletionHandler" 
-           gibi bir Objective-C mapping'i kastediyor olabilir. 
-           Eğer yine hata verirse `new: '.load(with:'` olarak değiştireceğiz.
-           Ancak Google SDK genellikle `load(withCompletionHandler:)` kullanır.
-           Güvenlik için her iki ihtimali de kapsayan bir regex düzeltmesi yapalım.
-        */
-        
-        // Eğer önceki patch çalıştıysa ve sadece parametre kaldıysa:
-        if (content.includes('ConsentForm.load(completionHandler:')) {
-             content = content.replace(/ConsentForm\.load\(completionHandler:/g, 'ConsentForm.load(withCompletionHandler:');
-        } 
-        // Eğer henüz class değişmediyse (UMPConsentForm ise):
-        else if (content.includes('UMPConsentForm.load(completionHandler:')) {
-             content = content.replace(/UMPConsentForm\.load\(completionHandler:/g, 'ConsentForm.load(withCompletionHandler:');
-        }
 
         let modified = false;
         replacements.forEach(rep => {
@@ -113,7 +104,7 @@ function patchAdMobFiles() {
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Final Fix V3) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Final Fix V4) ---');
 
   // 0. ÖNCE PATCH İŞLEMİNİ YAP
   patchAdMobFiles();
