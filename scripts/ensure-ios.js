@@ -26,7 +26,7 @@ async function downloadImage(url) {
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (iPhone Only Modu) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Plugin v6.0.0 + SDK v10.14.0) ---');
 
   // 1. Temel Klasör Kontrolleri
   if (!fs.existsSync('assets')) fs.mkdirSync('assets');
@@ -156,7 +156,7 @@ async function main() {
       const now = new Date();
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
-      // Build Version Güncelle
+      // Build Version
       if (content.includes('CFBundleVersion')) {
           content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       } else {
@@ -168,8 +168,7 @@ async function main() {
           content = content.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
       }
 
-      // 🚨 ÖNEMLİ: Sadece iPhone (iPad Desteğini Kapatır)
-      // UIDeviceFamily 1 = iPhone, 2 = iPad. Sadece 1 yaparak iPad zorunluluğunu kaldırıyoruz.
+      // 🚨 ÖNEMLİ: Sadece iPhone
       if (content.includes('UIDeviceFamily')) {
         content = content.replace(
             /<key>UIDeviceFamily<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/,
@@ -188,13 +187,12 @@ async function main() {
             <string>Namaz vakitleri için konum gereklidir.</string>`);
       }
 
-      // AdMob ID Ekleme (Info.plist'e GADApplicationIdentifier)
+      // AdMob ID (Info.plist GADApplicationIdentifier)
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
             <key>GADApplicationIdentifier</key>
             <string>ca-app-pub-4319080566007267~4413348107</string>`);
       }
-      // Not: SKAdNetworkItems reklam ağları için gerekebilir ama şimdilik ID yeterli.
 
       fs.writeFileSync(infoPlistPath, content);
       console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
@@ -202,20 +200,31 @@ async function main() {
 
   // 8. Podfile Düzenleme (AdMob Sürüm Sabitleme)
   const podfilePath = path.join('ios', 'App', 'Podfile');
+  const podLockPath = path.join('ios', 'App', 'Podfile.lock');
+
+  // KRİTİK: Podfile.lock silinmeli ki sürüm düşürme (downgrade) etkili olsun.
+  if (fs.existsSync(podLockPath)) {
+      console.log("🧹 Temizlik: Podfile.lock siliniyor (Versiyon çakışmasını önlemek için)...");
+      fs.unlinkSync(podLockPath);
+  }
+
   if (fs.existsSync(podfilePath)) {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
       
       // Google-Mobile-Ads-SDK sürümünü 10.14.0'a sabitliyoruz.
-      // v11.0.0+ sürümü UMP SDK'da breaking change (isim değişiklikleri) içeriyor.
-      // Mevcut admob plugin'i eski isimlendirmeyi kullandığı için v10 serisinde kalmalıyız.
+      // Admob Plugin v6.0.0 ile SDK v10.14.0 uyumludur.
       if (!podfileContent.includes("Google-Mobile-Ads-SDK")) {
           console.log("🔧 Podfile: Google-Mobile-Ads-SDK sürümü 10.14.0'a sabitleniyor...");
-          // 'target 'App' do' satırını bulup altına pod tanımını ekliyoruz
-          podfileContent = podfileContent.replace(
-              /target 'App' do/g, 
-              "target 'App' do\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
-          );
-          fs.writeFileSync(podfilePath, podfileContent);
+          
+          const targetRegex = /target\s+['"]App['"]\s+do/g;
+          
+          if (targetRegex.test(podfileContent)) {
+              podfileContent = podfileContent.replace(
+                  targetRegex, 
+                  "target 'App' do\n  pod 'Google-Mobile-Ads-SDK', '~> 10.14.0'"
+              );
+              fs.writeFileSync(podfilePath, podfileContent);
+          }
       }
   }
 
