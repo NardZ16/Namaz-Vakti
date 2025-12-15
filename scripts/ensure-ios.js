@@ -27,13 +27,25 @@ async function downloadImage(url) {
 
 // 🚑 AdMob Plugin Patch Fonksiyonu (Manuel Düzeltme)
 function patchAdMobFiles() {
-    const consentPath = path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Plugin', 'Consent', 'ConsentExecutor.swift');
+    // AdMob plugin v6+ klasör yapısı değiştiği için her iki ihtimali de kontrol ediyoruz
+    const potentialPaths = [
+        path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Sources', 'AdMobPlugin'), // Yeni Sürüm
+        path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Plugin')                 // Eski Sürüm
+    ];
+
+    let basePath = potentialPaths.find(p => fs.existsSync(p));
     
+    if (!basePath) {
+        console.warn("⚠️ AdMob plugin klasörü bulunamadı (Path sorunu). npm install çalıştırıldı mı?");
+        return;
+    }
+    
+    console.log(`📍 AdMob Plugin bulundu: ${basePath}`);
+
+    // 1. PATCH: ConsentExecutor.swift (Class İsim Değişiklikleri)
+    const consentPath = path.join(basePath, 'Consent', 'ConsentExecutor.swift');
     if (fs.existsSync(consentPath)) {
-        console.log("🚑 AdMob Plugin: 'ConsentExecutor.swift' SDK v11 uyumluluğu için patchleniyor...");
         let content = fs.readFileSync(consentPath, 'utf8');
-        
-        // 1. Sınıf İsim Değişiklikleri
         const replacements = [
             { old: /UMPConsentStatus/g, new: 'ConsentStatus' },
             { old: /UMPRequestParameters/g, new: 'RequestParameters' },
@@ -42,7 +54,7 @@ function patchAdMobFiles() {
             { old: /UMPConsentInformation/g, new: 'ConsentInformation' },
             { old: /UMPConsentForm/g, new: 'ConsentForm' },
             { old: /UMPFormStatus/g, new: 'FormStatus' },
-            // 2. Özellik İsim Değişiklikleri
+            // Özellikler
             { old: /\.sharedInstance/g, new: '.shared' },
             { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' }
         ];
@@ -57,19 +69,33 @@ function patchAdMobFiles() {
 
         if (modified) {
             fs.writeFileSync(consentPath, content);
-            console.log("✅ ConsentExecutor.swift başarıyla güncellendi.");
-        } else {
-            console.log("ℹ️ ConsentExecutor.swift zaten güncel veya eşleşme bulunamadı.");
+            console.log("✅ ConsentExecutor.swift: İsimlendirmeler güncellendi.");
         }
     } else {
-        console.warn("⚠️ AdMob plugin dosyası bulunamadı (npm install çalıştı mı?).");
+        console.warn("⚠️ ConsentExecutor.swift dosyası bulunamadı.");
+    }
+
+    // 2. PATCH: BannerExecutor.swift (Deprecated Smart Banner Hatası)
+    const bannerPath = path.join(basePath, 'Banner', 'BannerExecutor.swift');
+    if (fs.existsSync(bannerPath)) {
+        let content = fs.readFileSync(bannerPath, 'utf8');
+        
+        // HATA: 'kGADAdSizeSmartBannerPortrait' is deprecated
+        // ÇÖZÜM: 'GADPortraitAnchoredAdaptiveBannerAdSizeWithWidth(UIScreen.main.bounds.size.width)'
+        if (content.includes('kGADAdSizeSmartBannerPortrait')) {
+            content = content.replace(/kGADAdSizeSmartBannerPortrait/g, 'GADPortraitAnchoredAdaptiveBannerAdSizeWithWidth(UIScreen.main.bounds.size.width)');
+            fs.writeFileSync(bannerPath, content);
+            console.log("✅ BannerExecutor.swift: Deprecated banner size kodu güncellendi.");
+        }
+    } else {
+        console.warn("⚠️ BannerExecutor.swift dosyası bulunamadı.");
     }
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Manuel Patch Modu) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Final Fix V2) ---');
 
-  // 0. ÖNCE PATCH İŞLEMİNİ YAP (Pod Install'dan önce kodun düzelmesi lazım)
+  // 0. ÖNCE PATCH İŞLEMİNİ YAP
   patchAdMobFiles();
 
   // 1. Temel Klasör Kontrolleri
@@ -88,7 +114,7 @@ async function main() {
       } catch (e) {
         console.warn('⚠️ iOS platformu eklenirken uyarı:', e.message);
       }
-      // Platform yeni eklendiyse patch'i tekrar çalıştır (dosyalar yeni gelmiş olabilir)
+      // Platform yeni eklendi, dosyalar geldi, tekrar patchle
       patchAdMobFiles();
   }
 
@@ -102,7 +128,7 @@ async function main() {
         execSync('npm install sharp --no-save', { stdio: 'inherit' });
         sharp = require('sharp');
       } catch (err) {
-        console.warn('⚠️ Sharp yüklenemedi. İkon oluşturma işlemi ATLANACAK. (Varsayılan ikonlar kullanılacak)');
+        console.warn('⚠️ Sharp yüklenemedi. İkon oluşturma işlemi ATLANACAK.');
       }
   }
 
@@ -111,7 +137,6 @@ async function main() {
       console.log('🎨 İkonlar güncelleniyor...');
       const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
       
-      // Klasörü temizle ve yeniden oluştur
       if (fs.existsSync(iosIconDir)) {
           try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e) {}
       }
@@ -158,7 +183,6 @@ async function main() {
               console.log(`🌍 Resim indiriliyor: ${ICON_URL}`);
               const downloadedBuffer = await downloadImage(ICON_URL);
               await generateIcons(downloadedBuffer);
-              console.log('✅ Online resim indirildi ve ikon yapıldı.');
               processed = true;
           } catch (err) {
               console.warn(`⚠️ Online resim indirilemedi: ${err.message}.`);
@@ -166,12 +190,10 @@ async function main() {
       }
 
       if (!processed) {
-          console.log('🔄 Yedek (Fallback) ikon oluşturuluyor...');
           try {
               await generateIcons(Buffer.from(fallbackSvg));
-              console.log('✅ Yedek ikon oluşturuldu.');
           } catch (e) {
-              console.error('❌ İkon oluşturulamadı, ancak build devam edecek.', e.message);
+              console.error('❌ İkon oluşturulamadı.', e.message);
           }
       }
 
@@ -196,7 +218,7 @@ async function main() {
       };
       fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
   } else {
-      console.log('⏩ İkon oluşturma adımı atlandı (Sharp modülü yok).');
+      console.log('⏩ İkon oluşturma adımı atlandı.');
   }
 
   // 5. Info.plist Güncelleme
@@ -206,19 +228,16 @@ async function main() {
       const now = new Date();
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
-      // Build Version
       if (content.includes('CFBundleVersion')) {
           content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       } else {
           content = content.replace('<dict>', `<dict>\n<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       }
 
-      // Şifreleme İzni
       if (!content.includes('ITSAppUsesNonExemptEncryption')) {
           content = content.replace('<dict>', `<dict>\n<key>ITSAppUsesNonExemptEncryption</key>\n<false/>`);
       }
 
-      // iPhone Only
       if (content.includes('UIDeviceFamily')) {
         content = content.replace(
             /<key>UIDeviceFamily<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/,
@@ -228,7 +247,6 @@ async function main() {
         content = content.replace('<dict>', `<dict>\n<key>UIDeviceFamily</key>\n<array>\n<integer>1</integer>\n</array>`);
       }
 
-      // Konum İzinleri
       if (!content.includes('NSLocationWhenInUseUsageDescription')) {
           content = content.replace('<dict>', `<dict>
             <key>NSLocationWhenInUseUsageDescription</key>
@@ -237,7 +255,6 @@ async function main() {
             <string>Namaz vakitleri için konum gereklidir.</string>`);
       }
 
-      // AdMob ID
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
             <key>GADApplicationIdentifier</key>
@@ -245,7 +262,7 @@ async function main() {
       }
 
       fs.writeFileSync(infoPlistPath, content);
-      console.log(`✅ Ayarlar güncellendi: iPhone Only Modu, Build: ${buildVer}`);
+      console.log(`✅ Ayarlar güncellendi: Build ${buildVer}`);
   }
 
   // 6. Podfile Düzenleme
@@ -253,7 +270,6 @@ async function main() {
   const podLockPath = path.join('ios', 'App', 'Podfile.lock');
   const podsDir = path.join('ios', 'App', 'Pods');
 
-  // Eski kalıntıları temizle
   if (fs.existsSync(podLockPath)) {
       console.log("🧹 Podfile.lock siliniyor...");
       try { fs.unlinkSync(podLockPath); } catch(e) {}
@@ -267,14 +283,12 @@ async function main() {
   if (fs.existsSync(podfilePath)) {
       let podfileContent = fs.readFileSync(podfilePath, 'utf8');
       
-      // Platform Sürümü
       if (podfileContent.includes("platform :ios")) {
           podfileContent = podfileContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
       } else {
           podfileContent = "platform :ios, '13.0'\n" + podfileContent;
       }
       
-      // Eski SDK sabitlemelerini temizle
       if (podfileContent.includes("Google-Mobile-Ads-SDK")) {
            console.log("🔧 Podfile: Eski SDK kısıtlamaları temizleniyor...");
            podfileContent = podfileContent.replace(/.*pod 'Google-Mobile-Ads-SDK'.*/g, "");
@@ -283,7 +297,7 @@ async function main() {
       podfileContent = podfileContent.replace(/^\s*[\r\n]/gm, "");
       
       fs.writeFileSync(podfilePath, podfileContent);
-      console.log("✅ Podfile güncellendi: iOS 13.0");
+      console.log("✅ Podfile güncellendi.");
   }
 
 }
