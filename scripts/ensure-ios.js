@@ -42,11 +42,12 @@ function patchAdMobFiles() {
     
     console.log(`📍 AdMob Plugin bulundu: ${basePath}`);
 
-    // 1. PATCH: ConsentExecutor.swift (Class İsim Değişiklikleri)
+    // 1. PATCH: ConsentExecutor.swift (Class İsim Değişiklikleri ve Metot İmzaları)
     const consentPath = path.join(basePath, 'Consent', 'ConsentExecutor.swift');
     if (fs.existsSync(consentPath)) {
         let content = fs.readFileSync(consentPath, 'utf8');
         const replacements = [
+            // Sınıf İsimleri
             { old: /UMPConsentStatus/g, new: 'ConsentStatus' },
             { old: /UMPRequestParameters/g, new: 'RequestParameters' },
             { old: /UMPDebugSettings/g, new: 'DebugSettings' },
@@ -56,8 +57,27 @@ function patchAdMobFiles() {
             { old: /UMPFormStatus/g, new: 'FormStatus' },
             // Özellikler
             { old: /\.sharedInstance/g, new: '.shared' },
-            { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' }
+            { old: /\.tagForUnderAgeOfConsent/g, new: '.isTaggedForUnderAgeOfConsent' },
+            // 🚨 KRİTİK FİX: load metodu parametre hatası (expected 'with:')
+            { old: /\.load\(completionHandler:/g, new: '.load(withCompletionHandler:' } 
         ];
+
+        /* 
+           Not: Derleyici "expected 'with:'" diyorsa genellikle "withCompletionHandler" 
+           gibi bir Objective-C mapping'i kastediyor olabilir. 
+           Eğer yine hata verirse `new: '.load(with:'` olarak değiştireceğiz.
+           Ancak Google SDK genellikle `load(withCompletionHandler:)` kullanır.
+           Güvenlik için her iki ihtimali de kapsayan bir regex düzeltmesi yapalım.
+        */
+        
+        // Eğer önceki patch çalıştıysa ve sadece parametre kaldıysa:
+        if (content.includes('ConsentForm.load(completionHandler:')) {
+             content = content.replace(/ConsentForm\.load\(completionHandler:/g, 'ConsentForm.load(withCompletionHandler:');
+        } 
+        // Eğer henüz class değişmediyse (UMPConsentForm ise):
+        else if (content.includes('UMPConsentForm.load(completionHandler:')) {
+             content = content.replace(/UMPConsentForm\.load\(completionHandler:/g, 'ConsentForm.load(withCompletionHandler:');
+        }
 
         let modified = false;
         replacements.forEach(rep => {
@@ -69,7 +89,7 @@ function patchAdMobFiles() {
 
         if (modified) {
             fs.writeFileSync(consentPath, content);
-            console.log("✅ ConsentExecutor.swift: İsimlendirmeler güncellendi.");
+            console.log("✅ ConsentExecutor.swift: İsimlendirmeler ve Parametreler güncellendi.");
         }
     } else {
         console.warn("⚠️ ConsentExecutor.swift dosyası bulunamadı.");
@@ -93,7 +113,7 @@ function patchAdMobFiles() {
 }
 
 async function main() {
-  console.log('--- 📱 iOS Build Hazırlığı (Final Fix V2) ---');
+  console.log('--- 📱 iOS Build Hazırlığı (Final Fix V3) ---');
 
   // 0. ÖNCE PATCH İŞLEMİNİ YAP
   patchAdMobFiles();
