@@ -13,14 +13,6 @@ const PRAYER_NAMES: Record<string, string> = {
   Isha: 'Yatsı'
 };
 
-const SOUND_OPTIONS = [
-  { id: 'default', name: 'Sessiz / Sistem' },
-  { id: 'beep', name: 'Bip Sesi' },
-  { id: 'bird', name: 'Kuş Sesi' },
-  { id: 'water', name: 'Su Sesi' },
-  { id: 'adhan', name: 'Ezan Sesi (Kısa)' },
-];
-
 const NotificationSettings: React.FC = () => {
   const [permission, setPermission] = useState<string>('default');
   const [verseEnabled, setVerseEnabled] = useState<boolean>(() => {
@@ -33,7 +25,8 @@ const NotificationSettings: React.FC = () => {
     
     const initial: NotificationConfig = {};
     PRAYER_KEYS.forEach(key => {
-      initial[key] = { enabled: true, minutesBefore: 30, sound: 'beep' };
+      // Varsayılan olarak sound 'default' yazsa da servis artık 'notification.wav' kullanacak
+      initial[key] = { enabled: true, notifyOnTime: true, minutesBefore: 30, sound: 'default' };
     });
     return initial;
   });
@@ -53,10 +46,18 @@ const NotificationSettings: React.FC = () => {
     setPermission(granted ? 'granted' : 'denied');
   };
 
-  const togglePrayer = (key: string) => {
+  const toggleReminder = (key: string) => {
     setConfig(prev => ({
       ...prev,
       [key]: { ...prev[key], enabled: !prev[key].enabled }
+    }));
+    if (permission !== 'granted') handleRequestPermission();
+  };
+
+  const toggleOnTime = (key: string) => {
+    setConfig(prev => ({
+      ...prev,
+      [key]: { ...prev[key], notifyOnTime: !prev[key].notifyOnTime }
     }));
     if (permission !== 'granted') handleRequestPermission();
   };
@@ -68,8 +69,6 @@ const NotificationSettings: React.FC = () => {
       const newState = !verseEnabled;
       setVerseEnabled(newState);
       localStorage.setItem('verseNotificationEnabled', String(newState));
-      
-      // Anlık olarak planlayıcıyı tetikle
       scheduleDailyVerseNotification(newState);
   };
 
@@ -80,17 +79,10 @@ const NotificationSettings: React.FC = () => {
     }));
   };
 
-  const updateSound = (key: string, sound: string) => {
-    setConfig(prev => ({
-      ...prev,
-      [key]: { ...prev[key], sound: sound }
-    }));
-  };
-
   return (
     <div className="h-full overflow-y-auto p-4 pb-24">
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Bildirim Ayarları</h2>
-      <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Vakitlerden önce bildirim ve ses alın.</p>
+      <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">Vakit girdiğinde veya öncesinde özel sesli bildirim alın.</p>
 
       {/* İzin Alanı */}
       <div className="bg-amber-50 dark:bg-slate-800 p-4 rounded-xl mb-6 border border-amber-200 dark:border-slate-700 shadow-sm">
@@ -101,7 +93,7 @@ const NotificationSettings: React.FC = () => {
               </span>
           </div>
           
-          {permission !== 'granted' ? (
+          {permission !== 'granted' && (
               <div className="mt-3">
                 <button 
                     onClick={handleRequestPermission}
@@ -109,57 +101,63 @@ const NotificationSettings: React.FC = () => {
                 >
                     İzin İste
                 </button>
-                <p className="text-xs text-red-500 mt-2 italic">Bildirimlerin çalışması için izin gereklidir.</p>
               </div>
-          ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Bildirimleriniz aktif durumda.</p>
           )}
       </div>
 
-      {/* Diğer Bildirimler */}
       <div className="mb-6">
-          <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Diğer Bildirimler</h3>
+          <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Genel Bildirimler</h3>
           <div className="bg-white dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 shadow-sm">
              <div className="flex items-center justify-between">
                 <div>
-                   <span className="font-bold text-gray-700 dark:text-gray-200 block">Günün Ayeti / Meali</span>
-                   <span className="text-xs text-gray-400">Her gün öğle saatlerinde bir ayet meali bildirimi al.</span>
+                   <span className="font-bold text-gray-700 dark:text-gray-200 block">Günün Ayeti</span>
+                   <span className="text-xs text-gray-400">Her gün öğle saatlerinde bir ayet meali.</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={verseEnabled}
-                      onChange={toggleVerseNotification}
-                    />
+                    <input type="checkbox" className="sr-only peer" checked={verseEnabled} onChange={toggleVerseNotification} />
                     <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${verseEnabled ? 'peer-checked:bg-emerald-500' : ''}`}></div>
                 </label>
              </div>
           </div>
       </div>
 
-      <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Vakit Bildirimleri</h3>
+      <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Vakit Ayarları</h3>
       <div className="space-y-4">
         {PRAYER_KEYS.map(key => (
           <div key={key} className="bg-white dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-slate-600 pb-2">
               <span className="font-bold text-gray-700 dark:text-gray-200 text-lg">{PRAYER_NAMES[key]}</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={config[key]?.enabled || false}
-                  onChange={() => togglePrayer(key)}
-                />
-                <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${config[key]?.enabled ? 'peer-checked:bg-emerald-500' : ''}`}></div>
-              </label>
+            </div>
+
+            {/* 1. Tam Vakit Bildirimi */}
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col">
+                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Vakit Girdiğinde</span>
+                   <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Özel ses ile bildir</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={config[key]?.notifyOnTime || false} onChange={() => toggleOnTime(key)} />
+                    <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${config[key]?.notifyOnTime ? 'peer-checked:bg-emerald-500' : ''}`}></div>
+                </label>
+            </div>
+
+            {/* 2. Hatırlatıcı (Öncesi) */}
+            <div className="flex items-center justify-between mb-2">
+                 <div className="flex flex-col">
+                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Vakit Öncesi</span>
+                   <span className="text-xs text-gray-400">Hatırlatma kur</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={config[key]?.enabled || false} onChange={() => toggleReminder(key)} />
+                    <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${config[key]?.enabled ? 'peer-checked:bg-amber-500' : ''}`}></div>
+                </label>
             </div>
             
+            {/* Hatırlatıcı Detayları */}
             {config[key]?.enabled && (
-              <div className="space-y-3 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-lg animate-in slide-in-from-top-2 duration-200">
-                 {/* Time Slider */}
+              <div className="space-y-3 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-lg animate-in slide-in-from-top-2 duration-200 mt-2">
                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500 dark:text-gray-400 w-16">Süre:</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 w-16">Kaç dk önce:</span>
                     <div className="flex-1 flex items-center gap-2">
                         <input 
                         type="range" 
@@ -168,26 +166,12 @@ const NotificationSettings: React.FC = () => {
                         step="5"
                         value={config[key].minutesBefore}
                         onChange={(e) => updateMinutes(key, parseInt(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-600 accent-emerald-500"
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-600 accent-amber-500"
                         />
-                        <span className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 w-10 text-right">
+                        <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 w-10 text-right">
                         {config[key].minutesBefore}dk
                         </span>
                     </div>
-                 </div>
-
-                 {/* Sound Selector */}
-                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500 dark:text-gray-400 w-16">Ses:</span>
-                    <select 
-                        value={config[key].sound || 'default'} 
-                        onChange={(e) => updateSound(key, e.target.value)}
-                        className="flex-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 text-gray-800 dark:text-gray-200 text-sm rounded-lg p-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                        {SOUND_OPTIONS.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.name}</option>
-                        ))}
-                    </select>
                  </div>
               </div>
             )}

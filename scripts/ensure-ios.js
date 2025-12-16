@@ -86,7 +86,6 @@ async function main() {
   if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
 
   // 2. iOS Platform Kontrolü ve Onarımı
-  // Eğer ios klasörü var ama proje dosyası yoksa, klasör bozuktur. Silip baştan oluştur.
   if (fs.existsSync(iosDir) && !fs.existsSync(xcodeProj)) {
       console.log('⚠️ iOS klasörü var ama proje dosyası eksik. Temizleniyor...');
       try {
@@ -96,18 +95,41 @@ async function main() {
       }
   }
 
-  // iOS platformunu ekle
   if (!fs.existsSync(iosDir)) {
       console.log('⚙️ iOS platformu ekleniyor (npx cap add ios)...');
       try {
         execSync('npx cap add ios', { stdio: 'inherit', cwd: rootDir });
       } catch (e) {
         console.error('❌ iOS platformu eklenirken hata oluştu:', e.message);
-        process.exit(1); // Kritik hata, işlemi durdur.
+        process.exit(1); 
       }
   } else {
       console.log('✅ iOS platformu mevcut.');
   }
+
+  // --- SES DOSYASI KOPYALAMA (YENİ EKLENDİ) ---
+  const soundFileSource = path.join(assetsDir, 'notification.wav');
+  if (fs.existsSync(soundFileSource)) {
+      console.log('🔊 notification.wav bulundu, native klasörlere kopyalanıyor...');
+      
+      // Android
+      const androidRawDir = path.join(rootDir, 'android', 'app', 'src', 'main', 'res', 'raw');
+      if (fs.existsSync(path.join(rootDir, 'android'))) {
+          if (!fs.existsSync(androidRawDir)) fs.mkdirSync(androidRawDir, { recursive: true });
+          fs.copyFileSync(soundFileSource, path.join(androidRawDir, 'notification.wav'));
+          console.log('   ✅ Android (res/raw) kopyalandı.');
+      }
+
+      // iOS
+      const iosAppDir = path.join(iosDir, 'App', 'App');
+      if (fs.existsSync(iosAppDir)) {
+          fs.copyFileSync(soundFileSource, path.join(iosAppDir, 'notification.wav'));
+          console.log('   ✅ iOS (App/App) kopyalandı.');
+      }
+  } else {
+      console.log('⚠️ UYARI: assets/notification.wav bulunamadı! Varsayılan ses çalacaktır.');
+  }
+  // --------------------------------------------
 
   // 3. İKON İŞLEMLERİ (SIPS)
   if (fs.existsSync(xcodeProj)) {
@@ -182,7 +204,7 @@ async function main() {
       console.error('❌ Sync hatası:', e);
   }
 
-  // 5. Info.plist Düzenlemeleri (Kritik Bölüm)
+  // 5. Info.plist Düzenlemeleri
   const infoPlistPath = path.join(iosDir, 'App', 'App', 'Info.plist');
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
@@ -211,8 +233,7 @@ async function main() {
     <string>${buildVer}</string>`);
       }
 
-      // --- DİL AYARLARI (TR Zorlaması) ---
-      // 1. Development Region -> tr
+      // TR Zorlaması
       if (content.includes('CFBundleDevelopmentRegion')) {
           content = content.replace(/<key>CFBundleDevelopmentRegion<\/key>[\s\S]*?<string>.*?<\/string>/, `<key>CFBundleDevelopmentRegion</key>
     <string>tr</string>`);
@@ -222,7 +243,6 @@ async function main() {
     <string>tr</string>`);
       }
 
-      // 2. Localizations -> Sadece tr
       if (content.includes('CFBundleLocalizations')) {
           content = content.replace(
               /<key>CFBundleLocalizations<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/, 
@@ -239,14 +259,12 @@ async function main() {
     </array>`);
       }
       
-      // Şifreleme Bildirimi
       if (!content.includes('ITSAppUsesNonExemptEncryption')) {
           content = content.replace('<dict>', `<dict>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>`);
       }
 
-      // İzinler
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
     <key>GADApplicationIdentifier</key>
@@ -260,14 +278,12 @@ async function main() {
       }
 
       fs.writeFileSync(infoPlistPath, content);
-      console.log('✅ Info.plist güncellendi: Dil Türkçe (tr) olarak sabitlendi.');
+      console.log('✅ Info.plist güncellendi.');
   } else {
       console.error(`❌ HATA: Info.plist dosyası bulunamadı! Yol: ${infoPlistPath}`);
-      // Eğer proje oluşturulduysa ama plist yoksa çok büyük sorun vardır.
       process.exit(1); 
   }
 
-  // Podfile Patch
   const podfilePath = path.join(iosDir, 'App', 'Podfile');
   if (fs.existsSync(podfilePath)) {
       let podContent = fs.readFileSync(podfilePath, 'utf8');

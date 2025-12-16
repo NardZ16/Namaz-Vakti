@@ -56,11 +56,9 @@ const App: React.FC = () => {
     return localStorage.getItem('theme') !== 'light';
   });
 
-  // Custom Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Initialize Notification Channel on App Start
     initNotifications();
   }, []);
 
@@ -74,7 +72,6 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
-  // Init Native Features (AdMob)
   useEffect(() => {
      initializeAds().then(() => {
         setTimeout(() => {
@@ -169,15 +166,13 @@ const App: React.FC = () => {
     }
   }, [prayerData, calculateNextPrayer]);
 
-  // --------------- BİLDİRİM PLANLAMA SİSTEMİ ---------------
+  // --------------- BİLDİRİM PLANLAMA SİSTEMİ (GÜNCELLENDİ) ---------------
   const schedulePrayerNotifications = useCallback(async (data: AladhanData[]) => {
      const configStr = localStorage.getItem('notificationConfig');
      const verseEnabled = localStorage.getItem('verseNotificationEnabled') === 'true';
 
-     // Önce temizlik yapıyoruz (Namazlar + Ayetler hepsi gider)
      await cancelAllNotifications();
      
-     // 1. AYET BİLDİRİMİNİ YENİDEN KUR
      if (verseEnabled) {
          await scheduleDailyVerseNotification(true);
      }
@@ -187,53 +182,64 @@ const App: React.FC = () => {
      const config: NotificationConfig = JSON.parse(configStr);
      const now = new Date();
 
-     // BUG FIX: data.slice(0, 3) ayın 1,2,3'ünü alıyordu. 
-     // Bugünün indeksini bulup oradan sonrasını almalıyız.
      const currentDayIndex = data.findIndex(d => {
          const dPart = d.date.gregorian.date.split('-')[0];
          return parseInt(dPart) === now.getDate();
      });
 
-     // Eğer bugün listede yoksa (örn: ay sonu geçişi), 0'dan başla (fallback)
      const safeStartIndex = currentDayIndex !== -1 ? currentDayIndex : 0;
-     
-     // Bugünden itibaren sonraki 3 günü al
-     const targetDays = data.slice(safeStartIndex, safeStartIndex + 3);
+     const targetDays = data.slice(safeStartIndex, safeStartIndex + 3); // 3 günlük planla
 
      let scheduledCount = 0;
 
      for (const dayData of targetDays) {
-        const dateParts = dayData.date.gregorian.date.split('-'); // DD-MM-YYYY formatı
+        const dateParts = dayData.date.gregorian.date.split('-');
         const day = parseInt(dateParts[0]);
-        const month = parseInt(dateParts[1]) - 1; // JS months are 0-11
+        const month = parseInt(dateParts[1]) - 1;
         const year = parseInt(dateParts[2]);
 
         for (const key of ORDERED_PRAYERS) {
             const settings = config[key];
-            if (!settings?.enabled) continue;
+            if (!settings) continue;
 
             const timeStr = (dayData.timings as any)[key];
             const parsedTime = parseTime(timeStr);
             if (!parsedTime) continue;
 
-            // Namaz vakti tarihi
             const prayerDate = new Date(year, month, day, parsedTime.h, parsedTime.m, 0);
             
-            // Bildirim zamanı (örn: 45 dk önce)
-            const notificationDate = new Date(prayerDate.getTime() - (settings.minutesBefore * 60000));
-
-            // Sadece gelecek zamanlı bildirimleri kur
-            if (notificationDate.getTime() > now.getTime()) {
-                const title = "Namaz Vakti Hatırlatıcı";
-                const body = `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`;
+            // ID Generate (Unique): MMDDHHMM + Type
+            // Type 1: Reminder, Type 2: OnTime
+            const baseIdStr = `${month+1}${day}${parsedTime.h.toString().padStart(2,'0')}${parsedTime.m.toString().padStart(2,'0')}`;
+            
+            // 1. VAKİT ÖNCESİ HATIRLATMA (Varsa)
+            if (settings.enabled && settings.minutesBefore > 0) {
+                const notificationDate = new Date(prayerDate.getTime() - (settings.minutesBefore * 60000));
                 
-                // Unique ID generation: Day + Hour + Minute to avoid conflicts
-                // Ex: 151230 -> Day 15, 12:30
-                const idStr = `${day}${parsedTime.h.toString().padStart(2,'0')}${parsedTime.m.toString().padStart(2,'0')}`;
-                const id = parseInt(idStr);
+                if (notificationDate.getTime() > now.getTime()) {
+                    const id = parseInt(`1${baseIdStr}`); // Prefix 1
+                    await scheduleNotification(
+                        id, 
+                        "Namaz Vakti Hatırlatıcı", 
+                        `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`, 
+                        notificationDate
+                    );
+                    scheduledCount++;
+                }
+            }
 
-                await scheduleNotification(id, title, body, notificationDate);
-                scheduledCount++;
+            // 2. VAKİT GİRDİĞİNDE BİLDİRİM (Varsa)
+            if (settings.notifyOnTime) {
+                if (prayerDate.getTime() > now.getTime()) {
+                    const id = parseInt(`2${baseIdStr}`); // Prefix 2
+                    await scheduleNotification(
+                        id,
+                        PRAYER_MAP[key] + " Vakti",
+                        `${PRAYER_MAP[key]} vakti girdi. Haydi namaza!`,
+                        prayerDate
+                    );
+                    scheduledCount++;
+                }
             }
         }
      }
@@ -465,7 +471,6 @@ const App: React.FC = () => {
 
   const closeTool = () => {
       setActiveTool(null);
-      // Ayarlardan çıkınca bildirimleri güncelle
       if (prayerData.length > 0) {
           schedulePrayerNotifications(prayerData).then(() => {
               showToast('Bildirimler güncellendi.');
@@ -478,7 +483,6 @@ const App: React.FC = () => {
       
       <div className="fixed inset-0 z-0 bg-islamic-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-repeat"></div>
 
-      {/* Custom Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[100] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
             <svg className="w-5 h-5 text-emerald-400 dark:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
@@ -535,7 +539,6 @@ const App: React.FC = () => {
         </header>
       )}
 
-      {/* Main Content Area: Padding adjusted for spacing. */}
       <main className={`relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[120px] ${activeTool ? 'pt-0' : 'pt-[70px]'}`}>
         
         {!activeTool && error && (
@@ -544,7 +547,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* YAKLAŞAN GÜN UYARISI */}
         {!activeTool && upcomingAlerts.length > 0 && (
             <button 
                 onClick={() => setActiveTool('holidays')}
@@ -582,7 +584,6 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* Floating Bottom Nav */}
       <div className="fixed left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-300 bottom-[50px]">
          <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01] mx-4 mb-2">
             <button 
@@ -611,7 +612,6 @@ const App: React.FC = () => {
          </nav>
       </div>
 
-      {/* REKLAM ALANI YER TUTUCUSU (Banner Placeholder) */}
       <div className="fixed bottom-0 left-0 right-0 h-[50px] bg-black/10 dark:bg-white/5 backdrop-blur-sm border-t border-gray-200 dark:border-slate-700 flex items-center justify-center z-40 text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-none select-none">
           REKLAM ALANI (BANNER)
       </div>

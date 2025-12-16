@@ -3,31 +3,32 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getRandomVerse } from './geminiService';
 
-// Android 8.0+ için Bildirim Kanalı ŞARTTIR
-const CHANNEL_ID = 'namaz_vakti_channel_v1';
-const VERSE_NOTIF_ID = 90000; // Sabit ID
+// Tek bir kanal kullanıyoruz artık
+const CUSTOM_SOUND_CHANNEL = 'namaz_vakti_custom_sound';
+const VERSE_NOTIF_ID = 90000; 
+
+// Ses dosyası adı (Uzantı Android için genellikle gerekmez ama iOS ve bazı sürümler için .wav ekliyoruz)
+const SOUND_FILE = 'notification.wav'; 
 
 export const initNotifications = async () => {
   if (Capacitor.isNativePlatform()) {
     try {
-      // 1. İzinleri Kontrol Et ve İste
       const permStatus = await LocalNotifications.checkPermissions();
       if (permStatus.display !== 'granted') {
           await LocalNotifications.requestPermissions();
       }
       
-      // 2. Kanal oluştur (Android için kritik)
+      // Tek ve özel bir kanal oluştur
       await LocalNotifications.createChannel({
-        id: CHANNEL_ID,
-        name: 'Namaz Vakti Hatırlatıcı',
-        description: 'Namaz vakitleri için hatırlatmalar',
-        importance: 5, // Yüksek önem
-        visibility: 1, // Kilit ekranında görünür
-        sound: undefined, 
+        id: CUSTOM_SOUND_CHANNEL,
+        name: 'Namaz Vakti Bildirimleri',
+        description: 'Vakit ve hatırlatma bildirimleri',
+        importance: 5,
+        visibility: 1,
+        sound: SOUND_FILE, // assets/notification.wav -> native folders
         vibration: true,
       });
 
-      // 3. Ön Planda Bildirim Gösterme (iOS için Kritik)
       await LocalNotifications.addListener('localNotificationReceived', (notification) => {
           console.log('Bildirim alındı (Ön Plan):', notification);
       });
@@ -48,7 +49,6 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
         return false;
     }
   } else {
-    // Web Fallback
     if (!("Notification" in window)) return false;
     if (Notification.permission === "granted") return true;
     if (Notification.permission !== "denied") {
@@ -81,7 +81,6 @@ export const cancelAllNotifications = async () => {
     }
 };
 
-// Namaz Vakitleri İçin Planlama
 export const scheduleNotification = async (id: number, title: string, body: string, scheduleDate: Date) => {
   if (scheduleDate.getTime() <= Date.now() + 1000) {
       return; 
@@ -95,39 +94,31 @@ export const scheduleNotification = async (id: number, title: string, body: stri
           body,
           id: id,
           schedule: { at: scheduleDate },
-          channelId: CHANNEL_ID,
-          sound: 'beep.wav',
+          channelId: CUSTOM_SOUND_CHANNEL, // Özel ses kanalı
+          sound: SOUND_FILE,               // Özel ses dosyası
           smallIcon: 'ic_stat_icon_config_sample',
         }]
       });
-      console.log(`Bildirim planlandı [ID:${id}]: ${title} -> ${scheduleDate.toLocaleString()}`);
+      console.log(`Bildirim planlandı [ID:${id}]: ${title} -> ${scheduleDate.toLocaleString()} (Ses: ${SOUND_FILE})`);
     } catch (e) {
       console.error("Bildirim planlama hatası:", e);
     }
   }
 };
 
-// Günlük Ayet Bildirimi Planlama
 export const scheduleDailyVerseNotification = async (enabled: boolean) => {
     if (!Capacitor.isNativePlatform()) return;
 
     try {
-        // Önce mevcut ayet bildirimini iptal et (varsa)
         await LocalNotifications.cancel({ notifications: [{ id: VERSE_NOTIF_ID }] });
 
-        if (!enabled) {
-            console.log("Ayet bildirimi kapalı, iptal edildi.");
-            return;
-        }
+        if (!enabled) return;
 
         const verse = getRandomVerse();
         const now = new Date();
         const scheduleDate = new Date();
-        
-        // Her gün saat 12:00'de
         scheduleDate.setHours(12, 0, 0, 0);
 
-        // Eğer bugün saat 12 geçtiyse yarına kur
         if (scheduleDate <= now) {
             scheduleDate.setDate(scheduleDate.getDate() + 1);
         }
@@ -137,31 +128,17 @@ export const scheduleDailyVerseNotification = async (enabled: boolean) => {
                 title: "Günün Ayeti",
                 body: `"${verse.turkish}" - ${verse.reference}`,
                 id: VERSE_NOTIF_ID,
-                schedule: { at: scheduleDate, every: 'day' }, // Her gün tekrarla
-                channelId: CHANNEL_ID,
+                schedule: { at: scheduleDate, every: 'day' },
+                channelId: CUSTOM_SOUND_CHANNEL, // Özel ses
+                sound: SOUND_FILE,
                 smallIcon: 'ic_stat_icon_config_sample',
             }]
         });
-        console.log(`Ayet bildirimi planlandı: ${scheduleDate.toLocaleString()}`);
-
     } catch (e) {
         console.error("Ayet bildirimi planlama hatası:", e);
     }
 };
 
-// Test Bildirimi
-export const testNotification = async () => {
-    const testDate = new Date(Date.now() + 5000); 
-    await scheduleNotification(
-        99999, 
-        "Test Bildirimi", 
-        "Bu bildirim çalışıyorsa ayarlarınız doğrudur.", 
-        testDate
-    );
-    return testDate;
-};
-
-// Anlık bildirim
 export const sendNotification = async (title: string, body: string) => {
     if (Capacitor.isNativePlatform()) {
         await LocalNotifications.schedule({
@@ -170,7 +147,8 @@ export const sendNotification = async (title: string, body: string) => {
                 body,
                 id: Math.floor(Date.now() / 1000), 
                 schedule: { at: new Date(Date.now() + 1000) },
-                channelId: CHANNEL_ID,
+                channelId: CUSTOM_SOUND_CHANNEL,
+                sound: SOUND_FILE
             }]
         });
     } else if (Notification.permission === "granted") {

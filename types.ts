@@ -85,9 +85,10 @@ export interface ReligiousHoliday {
 
 export interface NotificationConfig {
   [key: string]: {
-    enabled: boolean;
-    minutesBefore: number;
-    sound: string; // 'default' | 'adhan' | 'beep' | 'water'
+    enabled: boolean;      // Vakit öncesi hatırlatma aktif mi?
+    notifyOnTime: boolean; // Tam vakitte bildirim aktif mi? (YENİ)
+    minutesBefore: number; // Kaç dk önce
+    sound: string;         // 'default' | 'adhan' | 'beep' | 'water'
   };
 }
 
