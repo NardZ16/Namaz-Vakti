@@ -31,10 +31,10 @@ async function downloadImage(url) {
     });
 }
 
-function patchAdMobFiles() {
+function patchAdMobFiles(basePathArg) {
     const potentialPaths = [
-        path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Sources', 'AdMobPlugin'),
-        path.join('node_modules', '@capacitor-community', 'admob', 'ios', 'Plugin')
+        path.join(basePathArg || '', 'node_modules', '@capacitor-community', 'admob', 'ios', 'Sources', 'AdMobPlugin'),
+        path.join(basePathArg || '', 'node_modules', '@capacitor-community', 'admob', 'ios', 'Plugin')
     ];
 
     let basePath = potentialPaths.find(p => fs.existsSync(p));
@@ -68,30 +68,52 @@ function patchAdMobFiles() {
 }
 
 async function main() {
-  console.log(`🚀 Script Başlatılıyor. Hedef Sürüm: ${APP_VERSION}`);
+  const rootDir = path.resolve(__dirname, '..');
+  const iosDir = path.join(rootDir, 'ios');
+  const xcodeProj = path.join(iosDir, 'App', 'App.xcodeproj');
 
-  // 1. Web Klasörleri
-  if (!fs.existsSync('dist')) {
-      fs.mkdirSync('dist'); 
-      fs.writeFileSync('dist/index.html', '<!DOCTYPE html><html><body>Hazırlanıyor...</body></html>');
+  console.log(`🚀 iOS Hazırlık Scripti Başlatılıyor (v${APP_VERSION})`);
+  console.log(`📂 Çalışma Dizini: ${rootDir}`);
+
+  // 1. Web Klasörleri Kontrolü (Capacitor için gerekli)
+  const distDir = path.join(rootDir, 'dist');
+  if (!fs.existsSync(distDir)) {
+      console.log('⚠️ dist klasörü bulunamadı, geçici olarak oluşturuluyor...');
+      fs.mkdirSync(distDir, { recursive: true }); 
+      fs.writeFileSync(path.join(distDir, 'index.html'), '<!DOCTYPE html><html><body>Building...</body></html>');
   }
-  if (!fs.existsSync('assets')) fs.mkdirSync('assets');
+  const assetsDir = path.join(rootDir, 'assets');
+  if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
 
-  // 2. iOS Platform Kontrolü
-  const xcodeprojPath = 'ios/App/App.xcodeproj';
-  if (!fs.existsSync(xcodeprojPath)) {
-      console.log('⚙️ iOS projesi oluşturuluyor...');
+  // 2. iOS Platform Kontrolü ve Onarımı
+  // Eğer ios klasörü var ama proje dosyası yoksa, klasör bozuktur. Silip baştan oluştur.
+  if (fs.existsSync(iosDir) && !fs.existsSync(xcodeProj)) {
+      console.log('⚠️ iOS klasörü var ama proje dosyası eksik. Temizleniyor...');
       try {
-        execSync('npx cap add ios', { stdio: 'inherit' });
+        fs.rmSync(iosDir, { recursive: true, force: true });
       } catch (e) {
-        console.error('❌ iOS platformu eklenemedi:', e.message);
+        console.error('❌ Klasör silinemedi:', e);
       }
   }
 
-  // 3. İKON İŞLEMLERİ
-  if (fs.existsSync(xcodeprojPath)) {
+  // iOS platformunu ekle
+  if (!fs.existsSync(iosDir)) {
+      console.log('⚙️ iOS platformu ekleniyor (npx cap add ios)...');
       try {
-          const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
+        execSync('npx cap add ios', { stdio: 'inherit', cwd: rootDir });
+      } catch (e) {
+        console.error('❌ iOS platformu eklenirken hata oluştu:', e.message);
+        process.exit(1); // Kritik hata, işlemi durdur.
+      }
+  } else {
+      console.log('✅ iOS platformu mevcut.');
+  }
+
+  // 3. İKON İŞLEMLERİ (SIPS)
+  if (fs.existsSync(xcodeProj)) {
+      console.log('🎨 İkonlar işleniyor...');
+      try {
+          const iosIconDir = path.join(iosDir, 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
           
           if (fs.existsSync(iosIconDir)) {
              try { fs.rmSync(iosIconDir, { recursive: true, force: true }); } catch(e) {}
@@ -153,12 +175,15 @@ async function main() {
 
   // 4. Sync & Patch
   try {
-      execSync('npx cap sync ios', { stdio: 'inherit' });
-      patchAdMobFiles();
-  } catch(e) {}
+      console.log('🔄 Sync işlemi başlatılıyor...');
+      execSync('npx cap sync ios', { stdio: 'inherit', cwd: rootDir });
+      patchAdMobFiles(rootDir);
+  } catch(e) {
+      console.error('❌ Sync hatası:', e);
+  }
 
   // 5. Info.plist Düzenlemeleri (Kritik Bölüm)
-  const infoPlistPath = 'ios/App/App/Info.plist';
+  const infoPlistPath = path.join(iosDir, 'App', 'App', 'Info.plist');
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
       
@@ -197,7 +222,7 @@ async function main() {
     <string>tr</string>`);
       }
 
-      // 2. Localizations -> Sadece tr (Varsa eskisini silip yenisini yazar)
+      // 2. Localizations -> Sadece tr
       if (content.includes('CFBundleLocalizations')) {
           content = content.replace(
               /<key>CFBundleLocalizations<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/, 
@@ -213,8 +238,7 @@ async function main() {
         <string>tr</string>
     </array>`);
       }
-      // -----------------------------------
-
+      
       // Şifreleme Bildirimi
       if (!content.includes('ITSAppUsesNonExemptEncryption')) {
           content = content.replace('<dict>', `<dict>
@@ -237,10 +261,14 @@ async function main() {
 
       fs.writeFileSync(infoPlistPath, content);
       console.log('✅ Info.plist güncellendi: Dil Türkçe (tr) olarak sabitlendi.');
+  } else {
+      console.error(`❌ HATA: Info.plist dosyası bulunamadı! Yol: ${infoPlistPath}`);
+      // Eğer proje oluşturulduysa ama plist yoksa çok büyük sorun vardır.
+      process.exit(1); 
   }
 
   // Podfile Patch
-  const podfilePath = path.join('ios', 'App', 'Podfile');
+  const podfilePath = path.join(iosDir, 'App', 'Podfile');
   if (fs.existsSync(podfilePath)) {
       let podContent = fs.readFileSync(podfilePath, 'utf8');
       podContent = podContent.replace(/platform :ios, .*/, "platform :ios, '13.0'");
