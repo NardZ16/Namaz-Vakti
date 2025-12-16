@@ -30,7 +30,12 @@ const QuranReader: React.FC = () => {
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
-  const [loading, setLoading] = useState(false);
+  
+  // Loading States
+  const [listLoading, setListLoading] = useState(true); // Liste yükleniyor mu?
+  const [contentLoading, setContentLoading] = useState(false); // Sure içeriği yükleniyor mu?
+  const [listError, setListError] = useState<string | null>(null); // Liste hatası
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [bookmark, setBookmark] = useState<Bookmark | null>(null);
   const [shouldScrollToBookmark, setShouldScrollToBookmark] = useState(false);
@@ -41,7 +46,48 @@ const QuranReader: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ayahRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Cache for Surah list and Bookmark
+  // 1. Surah Listesini Getir (Daha güvenli yöntem)
+  const fetchSurahs = async () => {
+    setListLoading(true);
+    setListError(null);
+
+    // Önce Cache Kontrolü
+    const cached = localStorage.getItem('quran_surahs');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            setSurahs(parsed);
+            setListLoading(false);
+            // Cache olsa bile arka planda güncelleme denenebilir, ama şimdilik performansı koruyalım.
+            return;
+        }
+      } catch (e) {
+        console.warn("Önbellek bozuk, siliniyor...", e);
+        localStorage.removeItem('quran_surahs');
+      }
+    }
+
+    // API'den Çekme
+    try {
+      const res = await fetch('https://api.alquran.cloud/v1/surah');
+      if (!res.ok) throw new Error("Sunucu yanıt vermedi");
+      
+      const data = await res.json();
+      if (data.code === 200 && Array.isArray(data.data)) {
+        setSurahs(data.data);
+        localStorage.setItem('quran_surahs', JSON.stringify(data.data));
+      } else {
+        throw new Error("Veri formatı hatalı");
+      }
+    } catch (error) {
+      console.error("Sure listesi alınamadı:", error);
+      setListError("Liste yüklenemedi. İnternet bağlantınızı kontrol edin.");
+    } finally {
+      setListLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Load Bookmark
     const savedBookmark = localStorage.getItem('quran_bookmark');
@@ -52,26 +98,7 @@ const QuranReader: React.FC = () => {
             console.error("Bookmark parse error", e);
         }
     }
-
-    const fetchSurahs = async () => {
-      const cached = localStorage.getItem('quran_surahs');
-      if (cached) {
-        setSurahs(JSON.parse(cached));
-        return;
-      }
-
-      try {
-        const res = await fetch('https://api.alquran.cloud/v1/surah');
-        const data = await res.json();
-        if (data.code === 200) {
-          setSurahs(data.data);
-          localStorage.setItem('quran_surahs', JSON.stringify(data.data));
-        }
-      } catch (error) {
-        console.error("Failed to fetch surahs", error);
-      }
-    };
-
+    
     fetchSurahs();
   }, []);
 
@@ -89,7 +116,7 @@ const QuranReader: React.FC = () => {
     }
 
     const fetchContent = async () => {
-        setLoading(true);
+        setContentLoading(true);
         try {
             // Fetch Arabic Text (Simple clean) and Turkish Translation
             // Using quran-simple for better readability as requested
@@ -124,8 +151,9 @@ const QuranReader: React.FC = () => {
 
         } catch (error) {
             console.error("Failed to fetch surah details", error);
+            // Burada kullanıcıya toast mesajı gösterilebilir
         } finally {
-            setLoading(false);
+            setContentLoading(false);
         }
     };
 
@@ -134,7 +162,7 @@ const QuranReader: React.FC = () => {
 
   // Handle Scroll to Bookmark after data loads
   useEffect(() => {
-    if (!loading && ayahs.length > 0 && shouldScrollToBookmark && bookmark) {
+    if (!contentLoading && ayahs.length > 0 && shouldScrollToBookmark && bookmark) {
         const index = ayahs.findIndex(a => a.numberInSurah === bookmark.ayahNumberInSurah);
         if (index !== -1 && ayahRefs.current[index]) {
             setTimeout(() => {
@@ -143,7 +171,7 @@ const QuranReader: React.FC = () => {
         }
         setShouldScrollToBookmark(false); // Reset flag
     }
-  }, [loading, ayahs, shouldScrollToBookmark, bookmark]);
+  }, [contentLoading, ayahs, shouldScrollToBookmark, bookmark]);
 
 
   // Handle Audio Events
@@ -251,7 +279,7 @@ const QuranReader: React.FC = () => {
             <div className="p-4 border-b border-amber-100 dark:border-slate-700 bg-[#fdfbf7] dark:bg-slate-800 sticky top-0 z-10 space-y-3">
                 
                 {/* Continue Reading Button */}
-                {bookmark && (
+                {bookmark && !listLoading && !listError && (
                     <button 
                         onClick={jumpToBookmark}
                         className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm group hover:shadow-md transition-all"
@@ -280,15 +308,30 @@ const QuranReader: React.FC = () => {
                         className="w-full p-3 pl-10 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white placeholder-gray-500 font-sans"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
+                        disabled={listLoading || !!listError}
                     />
                     <svg className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 pb-40">
-                {surahs.length === 0 ? (
-                    <div className="flex items-center justify-center h-40">
+                {listLoading ? (
+                    <div className="flex flex-col items-center justify-center h-64 space-y-4">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                        <p className="text-gray-400 text-sm font-sans">Sureler Yükleniyor...</p>
+                    </div>
+                ) : listError ? (
+                    <div className="flex flex-col items-center justify-center h-64 space-y-4 p-4 text-center">
+                         <div className="text-red-500 bg-red-100 p-3 rounded-full">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                         </div>
+                         <p className="text-gray-600 dark:text-gray-300 font-medium">{listError}</p>
+                         <button 
+                            onClick={fetchSurahs}
+                            className="px-6 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 font-bold text-sm"
+                         >
+                            Tekrar Dene
+                         </button>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-1">
@@ -346,6 +389,7 @@ const QuranReader: React.FC = () => {
                 <button 
                     onClick={togglePlayPause}
                     className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-md"
+                    disabled={contentLoading}
                 >
                     {isPlaying ? (
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
@@ -368,7 +412,7 @@ const QuranReader: React.FC = () => {
 
         {/* Content - COMPACT FLOW READING MODE */}
         <div className="flex-1 overflow-y-auto pb-40 scroll-smooth bg-[#fdfbf7] dark:bg-slate-950">
-            {loading ? (
+            {contentLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 space-y-4">
                     <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>
                     <p className="text-gray-500 font-sans">Sayfa hazırlanıyor...</p>
