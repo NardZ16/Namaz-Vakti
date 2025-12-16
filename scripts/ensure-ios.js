@@ -8,6 +8,10 @@ const https = require('https');
 const ICON_URL = "https://i.hizliresim.com/dn9sac4.png"; 
 // 👆👆👆 ----------------- 👆👆👆
 
+// Paket versiyonunu oku
+const packageJson = require('../package.json');
+const APP_VERSION = packageJson.version; 
+
 // Resmi indirme fonksiyonu
 async function downloadImage(url) {
     return new Promise((resolve, reject) => {
@@ -34,13 +38,8 @@ function patchAdMobFiles() {
     ];
 
     let basePath = potentialPaths.find(p => fs.existsSync(p));
+    if (!basePath) return;
     
-    if (!basePath) {
-        // console.warn("⚠️ AdMob plugin klasörü bulunamadı.");
-        return;
-    }
-    
-    // Patch logic...
     const consentPath = path.join(basePath, 'Consent', 'ConsentExecutor.swift');
     if (fs.existsSync(consentPath)) {
         let content = fs.readFileSync(consentPath, 'utf8');
@@ -69,7 +68,7 @@ function patchAdMobFiles() {
 }
 
 async function main() {
-  console.log('🚀 Script Başlatılıyor (SIPS MODE)...');
+  console.log(`🚀 Script Başlatılıyor. Hedef Sürüm: ${APP_VERSION}`);
 
   // 1. Web Klasörleri
   if (!fs.existsSync('dist')) {
@@ -82,7 +81,6 @@ async function main() {
   const xcodeprojPath = 'ios/App/App.xcodeproj';
   if (!fs.existsSync(xcodeprojPath)) {
       console.log('⚙️ iOS projesi oluşturuluyor...');
-      if (fs.existsSync('ios')) try { fs.rmSync('ios', { recursive: true, force: true }); } catch(e) {}
       try {
         execSync('npx cap add ios', { stdio: 'inherit' });
       } catch (e) {
@@ -90,9 +88,8 @@ async function main() {
       }
   }
 
-  // 3. İKON İŞLEMLERİ (SIPS KULLANARAK)
+  // 3. İKON İŞLEMLERİ
   if (fs.existsSync(xcodeprojPath)) {
-      console.log(`🎨 İkon indiriliyor ve işleniyor...`);
       try {
           const iosIconDir = path.join('ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset');
           
@@ -101,41 +98,32 @@ async function main() {
           }
           fs.mkdirSync(iosIconDir, { recursive: true });
 
-          // Resmi indir ve Master olarak kaydet
           const buffer = await downloadImage(ICON_URL);
           const masterPath = path.join(iosIconDir, 'master.png');
           fs.writeFileSync(masterPath, buffer);
 
-          // Hedef Boyutlar (App Store Validation için kritik)
           const icons = [
             { name: 'AppIcon-20x20@2x.png', size: 40 },
             { name: 'AppIcon-20x20@3x.png', size: 60 },
             { name: 'AppIcon-29x29@2x.png', size: 58 },
             { name: 'AppIcon-29x29@3x.png', size: 87 },
             { name: 'AppIcon-40x40@2x.png', size: 80 },
-            { name: 'AppIcon-40x40@3x.png', size: 120 }, // iPhone App Icon
-            { name: 'AppIcon-60x60@2x.png', size: 120 }, // iPhone App Icon
+            { name: 'AppIcon-40x40@3x.png', size: 120 },
+            { name: 'AppIcon-60x60@2x.png', size: 120 },
             { name: 'AppIcon-60x60@3x.png', size: 180 },
-            { name: 'AppIcon-76x76@2x.png', size: 152 }, // iPad App Icon
-            { name: 'AppIcon-83.5x83.5@2x.png', size: 167 }, // iPad Pro App Icon
+            { name: 'AppIcon-76x76@2x.png', size: 152 },
+            { name: 'AppIcon-83.5x83.5@2x.png', size: 167 },
             { name: 'AppIcon-512@2x.png', size: 1024 }
           ];
 
-          console.log("⚙️ 'sips' aracı ile yeniden boyutlandırılıyor...");
-          
           for (const icon of icons) {
               const destPath = path.join(iosIconDir, icon.name);
-              // macOS yerleşik resim işleme aracı: sips
-              // -z [height] [width]
               try {
                   execSync(`sips -z ${icon.size} ${icon.size} "${masterPath}" --out "${destPath}"`, { stdio: 'ignore' });
               } catch (sipsErr) {
-                  console.warn(`⚠️ Sips hatası (${icon.name}), kopyalama deneniyor...`);
                   fs.copyFileSync(masterPath, destPath);
               }
           }
-
-          // Master dosyayı temizle
           try { fs.unlinkSync(masterPath); } catch(e) {}
 
           const contentsJson = {
@@ -158,7 +146,6 @@ async function main() {
             "info": { "version": 1, "author": "xcode" }
           };
           fs.writeFileSync(path.join(iosIconDir, 'Contents.json'), JSON.stringify(contentsJson, null, 2));
-          console.log("✅ İkonlar başarıyla oluşturuldu (Validasyon uyumlu).");
       } catch (err) {
           console.error("⚠️ İkon işlemi hatası:", err.message);
       }
@@ -170,52 +157,89 @@ async function main() {
       patchAdMobFiles();
   } catch(e) {}
 
-  // 5. Info.plist Versiyon & İzinler
+  // 5. Info.plist Düzenlemeleri (Kritik Bölüm)
   const infoPlistPath = 'ios/App/App/Info.plist';
   if (fs.existsSync(infoPlistPath)) {
       let content = fs.readFileSync(infoPlistPath, 'utf8');
+      
       const now = new Date();
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
-      // Versiyon Güncelleme
-      content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
-      
-      // --- DİL AYARLARI (TÜRKÇE) ---
-      // Development Region'ı 'tr' yap
-      if (content.includes('CFBundleDevelopmentRegion')) {
-         content = content.replace(/<key>CFBundleDevelopmentRegion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleDevelopmentRegion</key>\n<string>tr</string>`);
+      console.log(`📝 Info.plist Güncelleniyor... (v${APP_VERSION}, Build: ${buildVer})`);
+
+      // Version ve Build Number
+      if (content.includes('CFBundleShortVersionString')) {
+          content = content.replace(/<key>CFBundleShortVersionString<\/key>[\s\S]*?<string>.*?<\/string>/, `<key>CFBundleShortVersionString</key>
+    <string>${APP_VERSION}</string>`);
       } else {
-         content = content.replace('<dict>', `<dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>tr</string>`);
+          content = content.replace('<dict>', `<dict>
+    <key>CFBundleShortVersionString</key>
+    <string>${APP_VERSION}</string>`);
       }
 
-      // Localizations dizisine 'tr' ekle (Yoksa oluştur)
-      if (!content.includes('CFBundleLocalizations')) {
-         content = content.replace('<dict>', `<dict>
-            <key>CFBundleLocalizations</key>
-            <array>
-                <string>tr</string>
-            </array>`);
+      if (content.includes('CFBundleVersion')) {
+          content = content.replace(/<key>CFBundleVersion<\/key>[\s\S]*?<string>.*?<\/string>/, `<key>CFBundleVersion</key>
+    <string>${buildVer}</string>`);
+      } else {
+          content = content.replace('<dict>', `<dict>
+    <key>CFBundleVersion</key>
+    <string>${buildVer}</string>`);
       }
-      // -----------------------------
 
+      // --- DİL AYARLARI (TR Zorlaması) ---
+      // 1. Development Region -> tr
+      if (content.includes('CFBundleDevelopmentRegion')) {
+          content = content.replace(/<key>CFBundleDevelopmentRegion<\/key>[\s\S]*?<string>.*?<\/string>/, `<key>CFBundleDevelopmentRegion</key>
+    <string>tr</string>`);
+      } else {
+          content = content.replace('<dict>', `<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>tr</string>`);
+      }
+
+      // 2. Localizations -> Sadece tr (Varsa eskisini silip yenisini yazar)
+      if (content.includes('CFBundleLocalizations')) {
+          content = content.replace(
+              /<key>CFBundleLocalizations<\/key>[\s\S]*?<array>[\s\S]*?<\/array>/, 
+              `<key>CFBundleLocalizations</key>
+    <array>
+        <string>tr</string>
+    </array>`
+          );
+      } else {
+          content = content.replace('<dict>', `<dict>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>tr</string>
+    </array>`);
+      }
+      // -----------------------------------
+
+      // Şifreleme Bildirimi
+      if (!content.includes('ITSAppUsesNonExemptEncryption')) {
+          content = content.replace('<dict>', `<dict>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>`);
+      }
+
+      // İzinler
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
-            <key>GADApplicationIdentifier</key>
-            <string>ca-app-pub-4319080566007267~4413348107</string>`);
+    <key>GADApplicationIdentifier</key>
+    <string>ca-app-pub-4319080566007267~4413348107</string>`);
       }
       
       if (!content.includes('NSLocationWhenInUseUsageDescription')) {
           content = content.replace('<dict>', `<dict>
-            <key>NSLocationWhenInUseUsageDescription</key>
-            <string>Namaz vakitleri için konum gereklidir.</string>`);
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Namaz vakitleri için konum gereklidir.</string>`);
       }
 
       fs.writeFileSync(infoPlistPath, content);
+      console.log('✅ Info.plist güncellendi: Dil Türkçe (tr) olarak sabitlendi.');
   }
 
-  // Podfile
+  // Podfile Patch
   const podfilePath = path.join('ios', 'App', 'Podfile');
   if (fs.existsSync(podfilePath)) {
       let podContent = fs.readFileSync(podfilePath, 'utf8');
@@ -223,10 +247,10 @@ async function main() {
       fs.writeFileSync(podfilePath, podContent);
   }
 
-  console.log('🎉 Script tamamlandı.');
+  console.log('🎉 Script başarıyla tamamlandı.');
 }
 
 main().catch(e => {
     console.error("Beklenmeyen Hata:", e);
-    process.exit(0);
+    process.exit(1);
 });

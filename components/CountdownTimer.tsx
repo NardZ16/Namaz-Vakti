@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { NextPrayerInfo } from '../types';
 
@@ -41,7 +42,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
   if (!nextPrayer) {
     return (
       <div className="w-full h-64 rounded-t-[10rem] rounded-b-3xl bg-gray-200 dark:bg-slate-800 animate-pulse flex items-center justify-center border-4 border-white dark:border-slate-700">
-        <span className="text-gray-400 dark:text-gray-500 font-sans font-medium">Yükleniyor...</span>
+        <span className="text-gray-400 dark:text-gray-500 font-sans font-medium">Vakitler Yükleniyor...</span>
       </div>
     );
   }
@@ -62,7 +63,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
             
             <div className="flex items-center gap-3 mb-2 opacity-90">
                 <span className="h-px w-8 bg-amber-400/50"></span>
-                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">Sonraki Vakte Kalan</span>
+                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">Vaktin Çıkmasına Kalan</span>
                 <span className="h-px w-8 bg-amber-400/50"></span>
             </div>
 
@@ -72,7 +73,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
 
             <div className="mt-4 flex flex-col items-center">
                  <div className="bg-white/10 backdrop-blur-sm px-6 py-2 rounded-full border border-white/20">
-                    <span className="text-amber-300 font-sans font-medium text-lg mr-2">Sonraki:</span>
+                    <span className="text-amber-300 font-sans font-medium text-lg mr-2">Sıradaki Vakit:</span>
                     <span className="text-white font-bold text-lg tracking-wide">{nextPrayer.prayerName}</span>
                  </div>
                  <div className="mt-2 text-teal-200/80 text-sm font-medium font-sans">
