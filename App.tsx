@@ -20,7 +20,6 @@ import QuranReader from './components/QuranReader';
 import Contact from './components/Contact';
 import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
-import { Toast } from '@capacitor/toast'; // Kullanıcıya bilgi vermek için eklendi
 
 const PRAYER_MAP: Record<string, string> = {
   Fajr: 'İmsak',
@@ -57,6 +56,9 @@ const App: React.FC = () => {
     return localStorage.getItem('theme') !== 'light';
   });
 
+  // Custom Toast State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   useEffect(() => {
     // Initialize Notification Channel on App Start
     initNotifications();
@@ -82,6 +84,13 @@ const App: React.FC = () => {
   }, []);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+        setToastMessage(null);
+    }, 2500);
+  };
 
   const parseTime = (timeStr: string): { h: number, m: number } | null => {
     if (!timeStr) return null;
@@ -459,16 +468,7 @@ const App: React.FC = () => {
       // Ayarlardan çıkınca bildirimleri güncelle
       if (prayerData.length > 0) {
           schedulePrayerNotifications(prayerData).then(() => {
-              // Kullanıcıya bilgi ver
-              try {
-                Toast.show({
-                  text: 'Bildirimler güncellendi.',
-                  duration: 'short',
-                  position: 'bottom'
-                });
-              } catch (e) {
-                // Web'de hata verebilir, yoksay
-              }
+              showToast('Bildirimler güncellendi.');
           });
       }
   };
@@ -477,6 +477,14 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#f5f2eb] dark:bg-[#0c1218] text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 selection:bg-teal-500 selection:text-white relative overflow-hidden">
       
       <div className="fixed inset-0 z-0 bg-islamic-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-repeat"></div>
+
+      {/* Custom Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[100] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
+            <svg className="w-5 h-5 text-emerald-400 dark:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+            {toastMessage}
+        </div>
+      )}
 
       {!activeTool && (
         <header className="fixed top-0 left-0 right-0 z-50 pt-[env(safe-area-inset-top)] bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 backdrop-blur-md border-b border-amber-200/50 dark:border-slate-800 transition-all duration-300">
