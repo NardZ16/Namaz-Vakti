@@ -1,9 +1,11 @@
 
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
+import { getRandomVerse } from './geminiService';
 
 // Android 8.0+ için Bildirim Kanalı ŞARTTIR
 const CHANNEL_ID = 'namaz_vakti_channel_v1';
+const VERSE_NOTIF_ID = 90000; // Sabit ID
 
 export const initNotifications = async () => {
   if (Capacitor.isNativePlatform()) {
@@ -26,7 +28,6 @@ export const initNotifications = async () => {
       });
 
       // 3. Ön Planda Bildirim Gösterme (iOS için Kritik)
-      // Uygulama açıkken bildirim gelirse bunu alert olarak göster veya yoksayma
       await LocalNotifications.addListener('localNotificationReceived', (notification) => {
           console.log('Bildirim alındı (Ön Plan):', notification);
       });
@@ -80,11 +81,9 @@ export const cancelAllNotifications = async () => {
     }
 };
 
-// Yeni Planlama Fonksiyonu (Scheduling)
+// Namaz Vakitleri İçin Planlama
 export const scheduleNotification = async (id: number, title: string, body: string, scheduleDate: Date) => {
-  // Geçmiş zaman kontrolü (1 saniye tolerans)
   if (scheduleDate.getTime() <= Date.now() + 1000) {
-      console.warn("Geçmiş tarihli bildirim planlanamaz:", scheduleDate);
       return; 
   }
 
@@ -97,24 +96,62 @@ export const scheduleNotification = async (id: number, title: string, body: stri
           id: id,
           schedule: { at: scheduleDate },
           channelId: CHANNEL_ID,
-          sound: 'beep.wav', // iOS'te dosya yoksa default çalar
+          sound: 'beep.wav',
           smallIcon: 'ic_stat_icon_config_sample',
-          actionTypeId: "",
-          extra: null
         }]
       });
       console.log(`Bildirim planlandı [ID:${id}]: ${title} -> ${scheduleDate.toLocaleString()}`);
     } catch (e) {
       console.error("Bildirim planlama hatası:", e);
     }
-  } else {
-    console.log(`[WEB SIMULATION] Bildirim planlandı: ${scheduleDate.toLocaleTimeString()} - ${title}`);
   }
 };
 
-// Test Bildirimi (5 Saniye Sonraya)
+// Günlük Ayet Bildirimi Planlama
+export const scheduleDailyVerseNotification = async (enabled: boolean) => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+        // Önce mevcut ayet bildirimini iptal et (varsa)
+        await LocalNotifications.cancel({ notifications: [{ id: VERSE_NOTIF_ID }] });
+
+        if (!enabled) {
+            console.log("Ayet bildirimi kapalı, iptal edildi.");
+            return;
+        }
+
+        const verse = getRandomVerse();
+        const now = new Date();
+        const scheduleDate = new Date();
+        
+        // Her gün saat 12:00'de
+        scheduleDate.setHours(12, 0, 0, 0);
+
+        // Eğer bugün saat 12 geçtiyse yarına kur
+        if (scheduleDate <= now) {
+            scheduleDate.setDate(scheduleDate.getDate() + 1);
+        }
+
+        await LocalNotifications.schedule({
+            notifications: [{
+                title: "Günün Ayeti",
+                body: `"${verse.turkish}" - ${verse.reference}`,
+                id: VERSE_NOTIF_ID,
+                schedule: { at: scheduleDate, every: 'day' }, // Her gün tekrarla
+                channelId: CHANNEL_ID,
+                smallIcon: 'ic_stat_icon_config_sample',
+            }]
+        });
+        console.log(`Ayet bildirimi planlandı: ${scheduleDate.toLocaleString()}`);
+
+    } catch (e) {
+        console.error("Ayet bildirimi planlama hatası:", e);
+    }
+};
+
+// Test Bildirimi
 export const testNotification = async () => {
-    const testDate = new Date(Date.now() + 5000); // 5 saniye sonra
+    const testDate = new Date(Date.now() + 5000); 
     await scheduleNotification(
         99999, 
         "Test Bildirimi", 
@@ -131,8 +168,8 @@ export const sendNotification = async (title: string, body: string) => {
             notifications: [{
                 title,
                 body,
-                id: Math.floor(Date.now() / 1000), // Unique ID
-                schedule: { at: new Date(Date.now() + 1000) }, // 1 sn sonra
+                id: Math.floor(Date.now() / 1000), 
+                schedule: { at: new Date(Date.now() + 1000) },
                 channelId: CHANNEL_ID,
             }]
         });

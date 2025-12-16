@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NotificationConfig } from '../types';
-import { requestNotificationPermission, checkNotificationPermission, testNotification } from '../services/notificationService';
+import { requestNotificationPermission, checkNotificationPermission, testNotification, scheduleDailyVerseNotification } from '../services/notificationService';
 import { isNative } from '../services/nativeService';
 
 const PRAYER_KEYS = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
@@ -24,6 +24,10 @@ const SOUND_OPTIONS = [
 
 const NotificationSettings: React.FC = () => {
   const [permission, setPermission] = useState<string>('default');
+  const [verseEnabled, setVerseEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('verseNotificationEnabled') === 'true';
+  });
+
   const [config, setConfig] = useState<NotificationConfig>(() => {
     const saved = localStorage.getItem('notificationConfig');
     if (saved) return JSON.parse(saved);
@@ -67,6 +71,18 @@ const NotificationSettings: React.FC = () => {
       [key]: { ...prev[key], enabled: !prev[key].enabled }
     }));
     if (permission !== 'granted') handleRequestPermission();
+  };
+
+  const toggleVerseNotification = async () => {
+      if (permission !== 'granted') {
+          await handleRequestPermission();
+      }
+      const newState = !verseEnabled;
+      setVerseEnabled(newState);
+      localStorage.setItem('verseNotificationEnabled', String(newState));
+      
+      // Anlık olarak planlayıcıyı tetikle
+      scheduleDailyVerseNotification(newState);
   };
 
   const updateMinutes = (key: string, min: number) => {
@@ -120,6 +136,29 @@ const NotificationSettings: React.FC = () => {
           <p className="text-xs text-gray-400 mt-2 italic">Test butonuna basınca 5 saniye sonra bildirim gelir.</p>
       </div>
 
+      {/* Diğer Bildirimler */}
+      <div className="mb-6">
+          <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Diğer Bildirimler</h3>
+          <div className="bg-white dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 shadow-sm">
+             <div className="flex items-center justify-between">
+                <div>
+                   <span className="font-bold text-gray-700 dark:text-gray-200 block">Günün Ayeti / Meali</span>
+                   <span className="text-xs text-gray-400">Her gün öğle saatlerinde bir ayet meali bildirimi al.</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={verseEnabled}
+                      onChange={toggleVerseNotification}
+                    />
+                    <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${verseEnabled ? 'peer-checked:bg-emerald-500' : ''}`}></div>
+                </label>
+             </div>
+          </div>
+      </div>
+
+      <h3 className="font-bold text-gray-600 dark:text-gray-400 text-sm mb-3 uppercase tracking-wider">Vakit Bildirimleri</h3>
       <div className="space-y-4">
         {PRAYER_KEYS.map(key => (
           <div key={key} className="bg-white dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 shadow-sm">

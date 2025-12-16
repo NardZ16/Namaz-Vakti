@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Geolocation } from '@capacitor/geolocation';
 import { fetchPrayerCalendar, fetchPrayerCalendarByCity, fetchCityCoordinates } from './services/aladhanService';
 import { fetchDailyVerse } from './services/geminiService';
-import { initNotifications, scheduleNotification, cancelAllNotifications, sendNotification } from './services/notificationService';
+import { initNotifications, scheduleNotification, cancelAllNotifications, sendNotification, scheduleDailyVerseNotification } from './services/notificationService';
 import { initializeAds, showBottomBanner } from './services/nativeService';
 import { getUpcomingHolidays } from './data/holidays';
 import CountdownTimer from './components/CountdownTimer';
@@ -20,6 +20,7 @@ import QuranReader from './components/QuranReader';
 import Contact from './components/Contact';
 import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
+import { Toast } from '@capacitor/toast'; // Kullanıcıya bilgi vermek için eklendi
 
 const PRAYER_MAP: Record<string, string> = {
   Fajr: 'İmsak',
@@ -159,22 +160,43 @@ const App: React.FC = () => {
     }
   }, [prayerData, calculateNextPrayer]);
 
-  // --------------- YENİ BİLDİRİM PLANLAMA SİSTEMİ ---------------
+  // --------------- BİLDİRİM PLANLAMA SİSTEMİ ---------------
   const schedulePrayerNotifications = useCallback(async (data: AladhanData[]) => {
      const configStr = localStorage.getItem('notificationConfig');
+     const verseEnabled = localStorage.getItem('verseNotificationEnabled') === 'true';
+
+     // Önce temizlik yapıyoruz (Namazlar + Ayetler hepsi gider)
+     await cancelAllNotifications();
+     
+     // 1. AYET BİLDİRİMİNİ YENİDEN KUR
+     if (verseEnabled) {
+         await scheduleDailyVerseNotification(true);
+     }
+
      if (!configStr || data.length === 0) return;
      
      const config: NotificationConfig = JSON.parse(configStr);
      const now = new Date();
 
-     await cancelAllNotifications();
+     // BUG FIX: data.slice(0, 3) ayın 1,2,3'ünü alıyordu. 
+     // Bugünün indeksini bulup oradan sonrasını almalıyız.
+     const currentDayIndex = data.findIndex(d => {
+         const dPart = d.date.gregorian.date.split('-')[0];
+         return parseInt(dPart) === now.getDate();
+     });
 
-     const targetDays = data.slice(0, 3);
+     // Eğer bugün listede yoksa (örn: ay sonu geçişi), 0'dan başla (fallback)
+     const safeStartIndex = currentDayIndex !== -1 ? currentDayIndex : 0;
+     
+     // Bugünden itibaren sonraki 3 günü al
+     const targetDays = data.slice(safeStartIndex, safeStartIndex + 3);
+
+     let scheduledCount = 0;
 
      for (const dayData of targetDays) {
-        const dateParts = dayData.date.gregorian.date.split('-');
+        const dateParts = dayData.date.gregorian.date.split('-'); // DD-MM-YYYY formatı
         const day = parseInt(dateParts[0]);
-        const month = parseInt(dateParts[1]) - 1; 
+        const month = parseInt(dateParts[1]) - 1; // JS months are 0-11
         const year = parseInt(dateParts[2]);
 
         for (const key of ORDERED_PRAYERS) {
@@ -185,16 +207,30 @@ const App: React.FC = () => {
             const parsedTime = parseTime(timeStr);
             if (!parsedTime) continue;
 
+            // Namaz vakti tarihi
             const prayerDate = new Date(year, month, day, parsedTime.h, parsedTime.m, 0);
+            
+            // Bildirim zamanı (örn: 45 dk önce)
             const notificationDate = new Date(prayerDate.getTime() - (settings.minutesBefore * 60000));
 
+            // Sadece gelecek zamanlı bildirimleri kur
             if (notificationDate.getTime() > now.getTime()) {
                 const title = "Namaz Vakti Hatırlatıcı";
                 const body = `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`;
-                const id = parseInt(notificationDate.getTime().toString().slice(-9));
+                
+                // Unique ID generation: Day + Hour + Minute to avoid conflicts
+                // Ex: 151230 -> Day 15, 12:30
+                const idStr = `${day}${parsedTime.h.toString().padStart(2,'0')}${parsedTime.m.toString().padStart(2,'0')}`;
+                const id = parseInt(idStr);
+
                 await scheduleNotification(id, title, body, notificationDate);
+                scheduledCount++;
             }
         }
+     }
+
+     if (scheduledCount > 0) {
+        console.log(`${scheduledCount} adet namaz bildirimi planlandı.`);
      }
   }, []);
   // -------------------------------------------------------------
@@ -420,7 +456,21 @@ const App: React.FC = () => {
 
   const closeTool = () => {
       setActiveTool(null);
-      schedulePrayerNotifications(prayerData);
+      // Ayarlardan çıkınca bildirimleri güncelle
+      if (prayerData.length > 0) {
+          schedulePrayerNotifications(prayerData).then(() => {
+              // Kullanıcıya bilgi ver
+              try {
+                Toast.show({
+                  text: 'Bildirimler güncellendi.',
+                  duration: 'short',
+                  position: 'bottom'
+                });
+              } catch (e) {
+                // Web'de hata verebilir, yoksay
+              }
+          });
+      }
   };
 
   return (
@@ -504,7 +554,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="relative z-10 flex flex-col items-center justify-center bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1">
                     <span className="text-xl font-bold font-cinzel">{upcomingAlerts[0].daysLeft}</span>
-                    <span className="text-[10px] font-bold uppercase">Gün</span>
+                    <span className="text-sm font-bold uppercase">Gün</span>
                 </div>
             </button>
         )}
