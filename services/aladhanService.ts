@@ -3,6 +3,20 @@ import { AladhanResponse } from '../types';
 
 const BASE_URL = 'https://api.aladhan.com/v1';
 
+// Helper to fetch with timeout
+const fetchWithTimeout = async (url: string, timeout = 10000): Promise<Response> => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
+};
+
 export const fetchPrayerCalendar = async (
   latitude: number,
   longitude: number,
@@ -18,7 +32,7 @@ export const fetchPrayerCalendar = async (
     year: year.toString()
   });
 
-  const response = await fetch(`${BASE_URL}/calendar?${params.toString()}`);
+  const response = await fetchWithTimeout(`${BASE_URL}/calendar?${params.toString()}`);
   
   if (!response.ok) {
     throw new Error(`Aladhan API error: ${response.statusText}`);
@@ -41,7 +55,7 @@ export const fetchPrayerCalendarByCity = async (
     year: year.toString()
   });
 
-  const response = await fetch(`${BASE_URL}/calendarByCity?${params.toString()}`);
+  const response = await fetchWithTimeout(`${BASE_URL}/calendarByCity?${params.toString()}`);
 
   if (!response.ok) {
     throw new Error(`Aladhan API error: ${response.statusText}`);
@@ -58,7 +72,8 @@ export const fetchCityCoordinates = async (city: string, district?: string): Pro
     
     // Using OpenStreetMap Nominatim for highly accurate search results without API key
     // Limiting to 1 result, JSON format, RESTRICTED TO TURKEY (countrycodes=tr)
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=tr`);
+    // 5 seconds timeout for geocoding is enough
+    const response = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=tr`, 5000);
     
     if (!response.ok) return null;
     

@@ -1,15 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { SURAH_NAMES } from '../data/surahNames';
-
-interface Surah {
-  number: number;
-  name: string;
-  englishName: string;
-  englishNameTranslation: string;
-  numberOfAyahs: number;
-  revelationType: string;
-}
+import { SURAH_LIST, SurahMeta } from '../data/surahList';
 
 interface Ayah {
   number: number; // Global number
@@ -27,14 +18,14 @@ interface Bookmark {
 }
 
 const QuranReader: React.FC = () => {
-  const [surahs, setSurahs] = useState<Surah[]>([]);
-  const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
+  // Static data is loaded immediately
+  const [surahs] = useState<SurahMeta[]>(SURAH_LIST);
+  const [selectedSurah, setSelectedSurah] = useState<SurahMeta | null>(null);
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
   
-  // Loading States
-  const [listLoading, setListLoading] = useState(true); // Liste yükleniyor mu?
-  const [contentLoading, setContentLoading] = useState(false); // Sure içeriği yükleniyor mu?
-  const [listError, setListError] = useState<string | null>(null); // Liste hatası
+  // Content Loading States
+  const [contentLoading, setContentLoading] = useState(false); 
+  const [contentError, setContentError] = useState<string | null>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [bookmark, setBookmark] = useState<Bookmark | null>(null);
@@ -46,50 +37,7 @@ const QuranReader: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ayahRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // 1. Surah Listesini Getir (Daha güvenli yöntem)
-  const fetchSurahs = async () => {
-    setListLoading(true);
-    setListError(null);
-
-    // Önce Cache Kontrolü
-    const cached = localStorage.getItem('quran_surahs');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-            setSurahs(parsed);
-            setListLoading(false);
-            // Cache olsa bile arka planda güncelleme denenebilir, ama şimdilik performansı koruyalım.
-            return;
-        }
-      } catch (e) {
-        console.warn("Önbellek bozuk, siliniyor...", e);
-        localStorage.removeItem('quran_surahs');
-      }
-    }
-
-    // API'den Çekme
-    try {
-      const res = await fetch('https://api.alquran.cloud/v1/surah');
-      if (!res.ok) throw new Error("Sunucu yanıt vermedi");
-      
-      const data = await res.json();
-      if (data.code === 200 && Array.isArray(data.data)) {
-        setSurahs(data.data);
-        localStorage.setItem('quran_surahs', JSON.stringify(data.data));
-      } else {
-        throw new Error("Veri formatı hatalı");
-      }
-    } catch (error) {
-      console.error("Sure listesi alınamadı:", error);
-      setListError("Liste yüklenemedi. İnternet bağlantınızı kontrol edin.");
-    } finally {
-      setListLoading(false);
-    }
-  };
-
   useEffect(() => {
-    // Load Bookmark
     const savedBookmark = localStorage.getItem('quran_bookmark');
     if (savedBookmark) {
         try {
@@ -98,16 +46,76 @@ const QuranReader: React.FC = () => {
             console.error("Bookmark parse error", e);
         }
     }
-    
-    fetchSurahs();
   }, []);
 
-  // Fetch Verse content when a Surah is selected
+  const fetchContent = async () => {
+    if (!selectedSurah) return;
+    
+    setContentLoading(true);
+    setContentError(null);
+    setAyahs([]);
+
+    // AbortController ile zaman aşımı (timeout) ekliyoruz
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 saniye limit
+
+    try {
+        const res = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurah.number}/editions/quran-simple,tr.diyanet`, {
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId); // İşlem başarılıysa zamanlayıcıyı temizle
+
+        if (!res.ok) throw new Error("Sunucu hatası");
+
+        const data = await res.json();
+        
+        if (data.code === 200 && data.data.length >= 2) {
+            const arabicData = data.data[0].ayahs;
+            const turkishData = data.data[1].ayahs;
+
+            const mergedAyahs = arabicData.map((ayah: any, index: number) => {
+                let text = ayah.text;
+                
+                // Clean Bismillah from the first verse of Surahs (except Fatiha and Tawbah)
+                if (selectedSurah.number !== 1 && selectedSurah.number !== 9 && index === 0) {
+                    text = text.replace(/^بِسْمِ\s+[ٱا]llāh\s+[ٱا]l-?raḥmān\s+[ٱا]l-?raḥīm\s*/i, "").trim(); 
+                    text = text.replace(/^بِسْمِ\s+[ٱا]للَّهِ\s+[ٱا]لرَّحْمَٰنِ\s+[ٱا]لرَّحِيمِ\s*/, "").trim();
+                }
+
+                return {
+                    number: ayah.number, 
+                    text: text,
+                    numberInSurah: ayah.numberInSurah,
+                    translation: turkishData[index]?.text || '',
+                    audio: `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${ayah.number}.mp3`
+                };
+            });
+
+            setAyahs(mergedAyahs);
+            ayahRefs.current = new Array(mergedAyahs.length).fill(null);
+        } else {
+            throw new Error("Veri formatı geçersiz");
+        }
+
+    } catch (error: any) {
+        console.error("Failed to fetch surah details", error);
+        if (error.name === 'AbortError') {
+            setContentError("İstek zaman aşımına uğradı. Bağlantınız yavaş olabilir.");
+        } else {
+            setContentError("Ayetler yüklenemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.");
+        }
+    } finally {
+        setContentLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedSurah) {
         setAyahs([]);
         setActiveAyahIndex(-1);
         setIsPlaying(false);
+        setContentError(null);
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
@@ -115,52 +123,9 @@ const QuranReader: React.FC = () => {
         return;
     }
 
-    const fetchContent = async () => {
-        setContentLoading(true);
-        try {
-            // Fetch Arabic Text (Simple clean) and Turkish Translation
-            // Using quran-simple for better readability as requested
-            const res = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurah.number}/editions/quran-simple,tr.diyanet`);
-            const data = await res.json();
-            
-            if (data.code === 200 && data.data.length >= 2) {
-                const arabicData = data.data[0].ayahs;
-                const turkishData = data.data[1].ayahs;
-
-                const mergedAyahs = arabicData.map((ayah: any, index: number) => {
-                    let text = ayah.text;
-                    
-                    // Clean Bismillah from the first verse of Surahs (except Fatiha and Tawbah)
-                    if (selectedSurah.number !== 1 && selectedSurah.number !== 9 && index === 0) {
-                        text = text.replace(/^بِسْمِ\s+[ٱا]llāh\s+[ٱا]l-?raḥmān\s+[ٱا]l-?raḥīm\s*/i, "").trim(); 
-                        text = text.replace(/^بِسْمِ\s+[ٱا]للَّهِ\s+[ٱا]لرَّحْمَٰنِ\s+[ٱا]لرَّحِيمِ\s*/, "").trim();
-                    }
-
-                    return {
-                        number: ayah.number, // Global number used for audio
-                        text: text,
-                        numberInSurah: ayah.numberInSurah,
-                        translation: turkishData[index]?.text || '',
-                        audio: `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${ayah.number}.mp3`
-                    };
-                });
-
-                setAyahs(mergedAyahs);
-                ayahRefs.current = new Array(mergedAyahs.length).fill(null);
-            }
-
-        } catch (error) {
-            console.error("Failed to fetch surah details", error);
-            // Burada kullanıcıya toast mesajı gösterilebilir
-        } finally {
-            setContentLoading(false);
-        }
-    };
-
     fetchContent();
   }, [selectedSurah]);
 
-  // Handle Scroll to Bookmark after data loads
   useEffect(() => {
     if (!contentLoading && ayahs.length > 0 && shouldScrollToBookmark && bookmark) {
         const index = ayahs.findIndex(a => a.numberInSurah === bookmark.ayahNumberInSurah);
@@ -169,12 +134,10 @@ const QuranReader: React.FC = () => {
                 ayahRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 500);
         }
-        setShouldScrollToBookmark(false); // Reset flag
+        setShouldScrollToBookmark(false);
     }
   }, [contentLoading, ayahs, shouldScrollToBookmark, bookmark]);
 
-
-  // Handle Audio Events
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -192,23 +155,19 @@ const QuranReader: React.FC = () => {
     return () => audio.removeEventListener('ended', handleEnded);
   }, [activeAyahIndex, ayahs]);
 
-  // Handle Bookmarking
   const toggleBookmark = (e: React.MouseEvent, ayah: Ayah) => {
     e.stopPropagation();
     if (!selectedSurah) return;
 
-    // Check if this is already the bookmark
     const isBookmarked = bookmark?.surahNumber === selectedSurah.number && bookmark?.ayahNumberInSurah === ayah.numberInSurah;
 
     if (isBookmarked) {
-        // Remove bookmark
         setBookmark(null);
         localStorage.removeItem('quran_bookmark');
     } else {
-        // Set bookmark
         const newBookmark: Bookmark = {
             surahNumber: selectedSurah.number,
-            surahName: getSurahName(selectedSurah.number),
+            surahName: selectedSurah.turkishName,
             ayahNumberInSurah: ayah.numberInSurah,
             timestamp: Date.now()
         };
@@ -219,7 +178,6 @@ const QuranReader: React.FC = () => {
 
   const jumpToBookmark = () => {
       if (!bookmark) return;
-      // Find the surah object
       const s = surahs.find(sur => sur.number === bookmark.surahNumber);
       if (s) {
           setSelectedSurah(s);
@@ -255,13 +213,8 @@ const QuranReader: React.FC = () => {
       }
   };
 
-  // Helper to get Turkish Name
-  const getSurahName = (surahNumber: number) => {
-      return SURAH_NAMES[surahNumber - 1] || `Sure ${surahNumber}`;
-  };
-
   const filteredSurahs = surahs.filter(s => 
-    getSurahName(s.number).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.turkishName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.englishName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -278,8 +231,7 @@ const QuranReader: React.FC = () => {
             {/* Search Header */}
             <div className="p-4 border-b border-amber-100 dark:border-slate-700 bg-[#fdfbf7] dark:bg-slate-800 sticky top-0 z-10 space-y-3">
                 
-                {/* Continue Reading Button */}
-                {bookmark && !listLoading && !listError && (
+                {bookmark && (
                     <button 
                         onClick={jumpToBookmark}
                         className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm group hover:shadow-md transition-all"
@@ -308,60 +260,38 @@ const QuranReader: React.FC = () => {
                         className="w-full p-3 pl-10 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white placeholder-gray-500 font-sans"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        disabled={listLoading || !!listError}
                     />
                     <svg className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2 pb-40">
-                {listLoading ? (
-                    <div className="flex flex-col items-center justify-center h-64 space-y-4">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
-                        <p className="text-gray-400 text-sm font-sans">Sureler Yükleniyor...</p>
-                    </div>
-                ) : listError ? (
-                    <div className="flex flex-col items-center justify-center h-64 space-y-4 p-4 text-center">
-                         <div className="text-red-500 bg-red-100 p-3 rounded-full">
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                         </div>
-                         <p className="text-gray-600 dark:text-gray-300 font-medium">{listError}</p>
-                         <button 
-                            onClick={fetchSurahs}
-                            className="px-6 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 font-bold text-sm"
-                         >
-                            Tekrar Dene
-                         </button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-1">
-                        {filteredSurahs.map(surah => (
-                            <button
-                                key={surah.number}
-                                onClick={() => setSelectedSurah(surah)}
-                                className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border-b border-gray-50 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors group rounded-lg mb-1 shadow-sm"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-slate-700 rounded-lg font-bold text-emerald-700 dark:text-emerald-400 text-xs font-sans">
-                                        {surah.number}
+                <div className="grid grid-cols-1 gap-1">
+                    {filteredSurahs.map(surah => (
+                        <button
+                            key={surah.number}
+                            onClick={() => setSelectedSurah(surah)}
+                            className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border-b border-gray-50 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors group rounded-lg mb-1 shadow-sm"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-slate-700 rounded-lg font-bold text-emerald-700 dark:text-emerald-400 text-xs font-sans">
+                                    {surah.number}
+                                </div>
+                                <div className="text-left">
+                                    <div className="font-bold text-gray-800 dark:text-white group-hover:text-emerald-600 transition-colors font-sans">
+                                        {surah.turkishName}
                                     </div>
-                                    <div className="text-left">
-                                        <div className="font-bold text-gray-800 dark:text-white group-hover:text-emerald-600 transition-colors font-sans">
-                                            {getSurahName(surah.number)}
-                                        </div>
-                                        <div className="text-[10px] text-gray-400 uppercase tracking-wide font-sans">
-                                            {surah.revelationType === 'Meccan' ? 'Mekke' : 'Medine'} • {surah.numberOfAyahs} Ayet
-                                        </div>
+                                    <div className="text-[10px] text-gray-400 uppercase tracking-wide font-sans">
+                                        {surah.revelationType === 'Meccan' ? 'Mekke' : 'Medine'} • {surah.numberOfAyahs} Ayet
                                     </div>
                                 </div>
-                                {/* Arabic Name remains distinct */}
-                                <div className="font-quran text-2xl text-gray-400 dark:text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" lang="ar">
-                                    {surah.name.replace('سورة', '').trim()}
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
+                            </div>
+                            <div className="font-quran text-2xl text-gray-400 dark:text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" lang="ar">
+                                {surah.name.replace('سورة', '').trim()}
+                            </div>
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>
     );
@@ -370,10 +300,8 @@ const QuranReader: React.FC = () => {
   // Surah Reading View
   return (
     <div className="h-full flex flex-col bg-[#fdfbf7] dark:bg-slate-950 relative">
-        {/* Audio Element (Hidden) */}
         <audio ref={audioRef} className="hidden" />
 
-        {/* Header with Controls */}
         <div className="bg-[#fdfbf7]/95 dark:bg-slate-900/95 border-b border-amber-200/50 dark:border-slate-800 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
              <div className="flex items-center justify-between px-4 py-3">
                 <button onClick={handleBack} className="flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-emerald-600 transition-colors bg-white border border-gray-100 dark:border-slate-700 dark:bg-slate-800 py-1.5 px-3 rounded-lg font-sans">
@@ -382,14 +310,13 @@ const QuranReader: React.FC = () => {
                 </button>
                 
                 <div className="text-center">
-                    <h2 className="font-sans font-bold text-lg text-gray-800 dark:text-white">{getSurahName(selectedSurah.number)}</h2>
+                    <h2 className="font-sans font-bold text-lg text-gray-800 dark:text-white">{selectedSurah.turkishName}</h2>
                 </div>
 
-                {/* Play Controls */}
                 <button 
                     onClick={togglePlayPause}
                     className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors shadow-md"
-                    disabled={contentLoading}
+                    disabled={contentLoading || !!contentError}
                 >
                     {isPlaying ? (
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
@@ -399,7 +326,6 @@ const QuranReader: React.FC = () => {
                 </button>
              </div>
              
-             {/* Progress Bar (Visual Only) */}
              {activeAyahIndex !== -1 && (
                  <div className="w-full h-1 bg-gray-100 dark:bg-slate-800">
                      <div 
@@ -410,16 +336,27 @@ const QuranReader: React.FC = () => {
              )}
         </div>
 
-        {/* Content - COMPACT FLOW READING MODE */}
         <div className="flex-1 overflow-y-auto pb-40 scroll-smooth bg-[#fdfbf7] dark:bg-slate-950">
             {contentLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 space-y-4">
                     <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>
                     <p className="text-gray-500 font-sans">Sayfa hazırlanıyor...</p>
                 </div>
+            ) : contentError ? (
+                <div className="flex flex-col items-center justify-center h-64 space-y-4 p-6 text-center">
+                    <div className="text-red-500 bg-red-100 p-4 rounded-full">
+                         <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-300 font-medium">{contentError}</p>
+                    <button 
+                        onClick={fetchContent}
+                        className="px-6 py-2 bg-emerald-600 text-white rounded-lg shadow-sm hover:bg-emerald-700 font-bold"
+                    >
+                        Tekrar Dene
+                    </button>
+                </div>
             ) : (
                 <div className="max-w-3xl mx-auto py-4">
-                    {/* Bismillah (Skip for Tawbah/Surah 9) */}
                     {selectedSurah.number !== 9 && (
                         <div className="text-center py-6 mb-2">
                             <div className="font-quran text-2xl md:text-3xl text-gray-800 dark:text-gray-200" lang="ar">
@@ -443,10 +380,8 @@ const QuranReader: React.FC = () => {
                                         ${isBookmarked ? 'bg-amber-50 dark:bg-amber-900/10' : ''}
                                     `}
                                 >
-                                    {/* Content Container */}
                                     <div className="flex flex-col gap-1">
                                         
-                                        {/* Arabic Text with Inline Verse Marker */}
                                         <div className="relative text-right" dir="rtl">
                                             <span 
                                                 className="font-quran text-3xl md:text-4xl leading-[2.2] text-gray-800 dark:text-gray-100 select-text" 
@@ -455,19 +390,16 @@ const QuranReader: React.FC = () => {
                                                 {ayah.text}
                                             </span>
                                             
-                                            {/* Decorative Verse End Marker (Inline) */}
                                             <span className="inline-flex items-center justify-center w-8 h-8 mr-2 align-middle font-sans text-sm text-emerald-700 dark:text-emerald-400 font-bold border-2 border-emerald-200 dark:border-emerald-800 rounded-full bg-white dark:bg-slate-800 select-none mx-1">
                                                 {ayah.numberInSurah}
                                             </span>
                                         </div>
 
-                                        {/* Translation Row + Small Controls */}
                                         <div className="flex items-start justify-between gap-4 mt-1 pl-1" dir="ltr">
                                              <p className="text-xs text-gray-400 dark:text-gray-500 leading-normal flex-1 pt-1 font-medium font-sans">
                                                 {ayah.translation}
                                              </p>
                                              
-                                             {/* Mini Controls */}
                                              <div className="flex items-center gap-3 opacity-60 hover:opacity-100 transition-opacity">
                                                  <button 
                                                     onClick={(e) => toggleBookmark(e, ayah)}
