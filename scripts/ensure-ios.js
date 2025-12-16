@@ -177,8 +177,29 @@ async function main() {
       const now = new Date();
       const buildVer = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
       
+      // Versiyon Güncelleme
       content = content.replace(/<key>CFBundleVersion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleVersion</key>\n<string>${buildVer}</string>`);
       
+      // --- DİL AYARLARI (TÜRKÇE) ---
+      // Development Region'ı 'tr' yap
+      if (content.includes('CFBundleDevelopmentRegion')) {
+         content = content.replace(/<key>CFBundleDevelopmentRegion<\/key>[\s\r\n]*<string>.*?<\/string>/g, `<key>CFBundleDevelopmentRegion</key>\n<string>tr</string>`);
+      } else {
+         content = content.replace('<dict>', `<dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>tr</string>`);
+      }
+
+      // Localizations dizisine 'tr' ekle (Yoksa oluştur)
+      if (!content.includes('CFBundleLocalizations')) {
+         content = content.replace('<dict>', `<dict>
+            <key>CFBundleLocalizations</key>
+            <array>
+                <string>tr</string>
+            </array>`);
+      }
+      // -----------------------------
+
       if (!content.includes('GADApplicationIdentifier')) {
         content = content.replace('<dict>', `<dict>
             <key>GADApplicationIdentifier</key>
