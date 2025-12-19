@@ -471,7 +471,7 @@ const App: React.FC = () => {
       <div className="fixed inset-0 z-0 bg-islamic-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-repeat"></div>
 
       {toastMessage && (
-        <div className="fixed bottom-40 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[120] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
+        <div className="fixed bottom-48 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[120] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
             <svg className="w-5 h-5 text-emerald-400 dark:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
             {toastMessage}
         </div>
@@ -527,8 +527,8 @@ const App: React.FC = () => {
         </header>
       )}
 
-      {/* Main Scroll Content */}
-      <main className={`flex-1 relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[180px] ${activeTool ? 'hidden' : 'pt-[74px]'}`}>
+      {/* Main Scroll Content - Increased bottom padding to accommodate raised navbar */}
+      <main className={`flex-1 relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[220px] ${activeTool ? 'hidden' : 'pt-[74px]'}`}>
         
         {error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
@@ -569,8 +569,8 @@ const App: React.FC = () => {
 
       </main>
 
-      {/* Floating Bottom Navigation - ALWAYS VISIBLE - CRITICAL: Higher Z-index than Modal Overlay */}
-      <div className="fixed left-0 right-0 z-[130] flex justify-center pointer-events-none transition-all duration-300 bottom-[74px]">
+      {/* Floating Bottom Navigation - RAISED to bottom-[90px] to avoid ad overlap */}
+      <div className="fixed left-0 right-0 z-[130] flex justify-center pointer-events-none transition-all duration-300 bottom-[90px]">
          <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.02] mx-4">
             <button 
                 onClick={() => { setActiveTool(null); setIsMenuOpen(false); }}
@@ -598,10 +598,9 @@ const App: React.FC = () => {
          </nav>
       </div>
 
-      {/* STICKY BOTTOM AD AREA - ALWAYS VISIBLE - Fixed at the very bottom */}
-      <div className="fixed bottom-0 left-0 right-0 h-[60px] bg-white dark:bg-[#0c1218] border-t border-gray-200 dark:border-slate-800 flex items-center justify-center z-[90] text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-auto select-none shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+      {/* STICKY BOTTOM AD AREA - Metin kaldırıldı, zemin bırakıldı */}
+      <div className="fixed bottom-0 left-0 right-0 h-[65px] bg-white dark:bg-[#0c1218] border-t border-gray-200 dark:border-slate-800 flex items-center justify-center z-[90] pointer-events-auto select-none shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent"></div>
-          REKLAM ALANI
       </div>
 
       <LocationModal 
@@ -613,7 +612,7 @@ const App: React.FC = () => {
         currentDistrict={selectedDistrict}
       />
 
-      {/* Menu Modal - Z-index [120] which is BELOW the Navbar [130] */}
+      {/* Menu Modal - Z-index [120] which is BELOW the Navbar [130] - Increased mb for lifted navbar */}
       <MenuModal 
         isOpen={isMenuOpen} 
         onClose={() => setIsMenuOpen(false)} 
@@ -623,9 +622,9 @@ const App: React.FC = () => {
         }}
       />
 
-      {/* Tool Container - Content Layer */}
+      {/* Tool Container - Content Layer - Adjusted padding for raised navbar */}
       {activeTool && (
-         <div className="fixed inset-0 z-[70] bg-[#f5f2eb] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)] pb-[160px]">
+         <div className="fixed inset-0 z-[70] bg-[#f5f2eb] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)] pb-[180px]">
             {activeTool !== 'quran' && (
                 <div className="p-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-[#f5f2eb] dark:bg-[#0c1218] shrink-0">
                     <button onClick={closeTool} className="flex items-center text-gray-600 dark:text-gray-300">
