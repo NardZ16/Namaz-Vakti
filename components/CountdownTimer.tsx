@@ -9,9 +9,11 @@ interface CountdownTimerProps {
 
 const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire }) => {
   const [timeLeft, setTimeLeft] = useState<string>('00:00:00');
+  const [isExpired, setIsExpired] = useState<boolean>(false);
   
   useEffect(() => {
     if (!nextPrayer) return;
+    setIsExpired(false);
 
     const interval = setInterval(() => {
       const now = new Date();
@@ -19,12 +21,13 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
 
       if (diff <= 0) {
         setTimeLeft('00:00:00');
+        setIsExpired(true);
         clearInterval(interval);
-        // Trigger parent update (wait 1s to ensure time has officially passed)
+        // Trigger parent update (wait 2s to show "Vakit Girdi" message)
         if (onExpire) {
             setTimeout(() => {
                 onExpire();
-            }, 1000);
+            }, 2000);
         }
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -50,7 +53,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
   return (
     <div className="relative w-full shadow-2xl overflow-hidden group">
       {/* Arch Shape Container */}
-      <div className="relative bg-gradient-to-b from-teal-700 via-teal-800 to-teal-900 dark:from-[#0f2e2e] dark:via-[#091f1f] dark:to-[#050f0f] rounded-t-[10rem] rounded-b-3xl p-8 pt-12 text-center border-[6px] border-double border-[#d4af37] dark:border-amber-700/50 shadow-[0_10px_30px_-5px_rgba(15,118,110,0.5)]">
+      <div className={`relative bg-gradient-to-b ${isExpired ? 'from-emerald-700 via-emerald-800 to-emerald-900' : 'from-teal-700 via-teal-800 to-teal-900'} dark:from-[#0f2e2e] dark:via-[#091f1f] dark:to-[#050f0f] rounded-t-[10rem] rounded-b-3xl p-8 pt-12 text-center border-[6px] border-double border-[#d4af37] dark:border-amber-700/50 shadow-[0_10px_30px_-5px_rgba(15,118,110,0.5)] transition-colors duration-500`}>
         
         {/* Decorative Pattern Overlay */}
         <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')]"></div>
@@ -63,12 +66,14 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
             
             <div className="flex items-center gap-3 mb-2 opacity-90">
                 <span className="h-px w-8 bg-amber-400/50"></span>
-                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">Vaktin Çıkmasına Kalan</span>
+                <span className="text-amber-300 font-serif font-medium text-xs md:text-sm tracking-[0.2em] uppercase">
+                    {isExpired ? 'VAKİT GİRDİ' : 'Vaktin Çıkmasına Kalan'}
+                </span>
                 <span className="h-px w-8 bg-amber-400/50"></span>
             </div>
 
-            <div className="font-cinzel text-6xl md:text-7xl font-bold text-white tracking-wider tabular-nums drop-shadow-md">
-                {timeLeft}
+            <div className={`font-cinzel font-bold text-white tracking-wider tabular-nums drop-shadow-md ${isExpired ? 'text-5xl py-2 animate-bounce' : 'text-6xl md:text-7xl'}`}>
+                {isExpired ? "EZAN VAKTİ" : timeLeft}
             </div>
 
             <div className="mt-4 flex flex-col items-center">
@@ -85,7 +90,7 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ nextPrayer, onExpire })
 
       {/* Hanging Lamp Decoration (Visual CSS only) */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-12 bg-amber-500/50 z-20"></div>
-      <div className="absolute top-12 left-1/2 -translate-x-1/2 w-3 h-3 bg-amber-400 rounded-full shadow-[0_0_15px_#fbbf24] z-20 animate-pulse"></div>
+      <div className={`absolute top-12 left-1/2 -translate-x-1/2 w-3 h-3 bg-amber-400 rounded-full shadow-[0_0_15px_#fbbf24] z-20 ${isExpired ? 'animate-ping' : 'animate-pulse'}`}></div>
 
     </div>
   );

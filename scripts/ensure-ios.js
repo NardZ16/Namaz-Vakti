@@ -5,7 +5,7 @@ const path = require('path');
 const https = require('https');
 
 // 👇👇👇 İKON AYARI 👇👇👇
-const ICON_URL = "https://i.hizliresim.com/dn9sac4.png"; 
+const ICON_URL = "https://i.hizliresim.com/dn7awmc.jpg"; 
 // 👆👆👆 ----------------- 👆👆👆
 
 // Paket versiyonunu oku

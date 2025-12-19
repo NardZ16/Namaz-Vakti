@@ -1,6 +1,6 @@
 {
   "name": "Namaz Vakti Pro",
-  "description": "Anlık konum bazlı, dinamik geri sayımlı ve günün ayeti özellikli modern namaz vakitleri uygulaması.",
+  "description": "En doğru Namaz Vakitleri, Ezan Saati, Kıble Pusulası, Zikirmatik ve Kuran-ı Kerim. Diyanet uyumlu, internetsiz çalışabilen modern İslami asistan.",
   "requestFramePermissions": [
     "geolocation"
   ]

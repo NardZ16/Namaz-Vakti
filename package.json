@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
     "cap:open": "npx cap open ios",
+    "android:prepare": "node scripts/prepare-android.js",
     "postinstall": "node scripts/ensure-ios.js"
   },
   "dependencies": {

@@ -4,7 +4,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { fetchPrayerCalendar, fetchPrayerCalendarByCity, fetchCityCoordinates } from './services/aladhanService';
 import { fetchDailyVerse } from './services/geminiService';
 import { initNotifications, scheduleNotification, cancelAllNotifications, sendNotification, scheduleDailyVerseNotification } from './services/notificationService';
-import { initializeAds, showBottomBanner } from './services/nativeService';
+import { initializeAds, showBottomBanner, isNative } from './services/nativeService';
 import { getUpcomingHolidays } from './data/holidays';
 import CountdownTimer from './components/CountdownTimer';
 import DailyList from './components/DailyList';
@@ -18,7 +18,6 @@ import QiblaCompass from './components/QiblaCompass';
 import Zikirmatik from './components/Zikirmatik';
 import QuranReader from './components/QuranReader';
 import Contact from './components/Contact';
-import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
 
 const PRAYER_MAP: Record<string, string> = {
@@ -73,11 +72,13 @@ const App: React.FC = () => {
   }, [darkMode]);
 
   useEffect(() => {
-     initializeAds().then(() => {
-        setTimeout(() => {
-            showBottomBanner();
-        }, 1500);
-     });
+     if (isNative()) {
+        initializeAds().then(() => {
+            setTimeout(() => {
+                showBottomBanner();
+            }, 1500);
+        });
+     }
   }, []);
 
   const toggleDarkMode = () => setDarkMode(!darkMode);
@@ -166,8 +167,9 @@ const App: React.FC = () => {
     }
   }, [prayerData, calculateNextPrayer]);
 
-  // --------------- BİLDİRİM PLANLAMA SİSTEMİ (GÜNCELLENDİ) ---------------
   const schedulePrayerNotifications = useCallback(async (data: AladhanData[]) => {
+     if (!isNative()) return; 
+
      const configStr = localStorage.getItem('notificationConfig');
      const verseEnabled = localStorage.getItem('verseNotificationEnabled') === 'true';
 
@@ -188,9 +190,7 @@ const App: React.FC = () => {
      });
 
      const safeStartIndex = currentDayIndex !== -1 ? currentDayIndex : 0;
-     const targetDays = data.slice(safeStartIndex, safeStartIndex + 3); // 3 günlük planla
-
-     let scheduledCount = 0;
+     const targetDays = data.slice(safeStartIndex, safeStartIndex + 3); 
 
      for (const dayData of targetDays) {
         const dateParts = dayData.date.gregorian.date.split('-');
@@ -207,48 +207,36 @@ const App: React.FC = () => {
             if (!parsedTime) continue;
 
             const prayerDate = new Date(year, month, day, parsedTime.h, parsedTime.m, 0);
-            
-            // ID Generate (Unique): MMDDHHMM + Type
-            // Type 1: Reminder, Type 2: OnTime
             const baseIdStr = `${month+1}${day}${parsedTime.h.toString().padStart(2,'0')}${parsedTime.m.toString().padStart(2,'0')}`;
             
-            // 1. VAKİT ÖNCESİ HATIRLATMA (Varsa)
             if (settings.enabled && settings.minutesBefore > 0) {
                 const notificationDate = new Date(prayerDate.getTime() - (settings.minutesBefore * 60000));
                 
                 if (notificationDate.getTime() > now.getTime()) {
-                    const id = parseInt(`1${baseIdStr}`); // Prefix 1
+                    const id = parseInt(`1${baseIdStr}`);
                     await scheduleNotification(
                         id, 
                         "Namaz Vakti Hatırlatıcı", 
                         `${PRAYER_MAP[key]} vaktine ${settings.minutesBefore} dakika kaldı.`, 
                         notificationDate
                     );
-                    scheduledCount++;
                 }
             }
 
-            // 2. VAKİT GİRDİĞİNDE BİLDİRİM (Varsa)
             if (settings.notifyOnTime) {
                 if (prayerDate.getTime() > now.getTime()) {
-                    const id = parseInt(`2${baseIdStr}`); // Prefix 2
+                    const id = parseInt(`2${baseIdStr}`);
                     await scheduleNotification(
                         id,
                         PRAYER_MAP[key] + " Vakti",
                         `${PRAYER_MAP[key]} vakti girdi. Haydi namaza!`,
                         prayerDate
                     );
-                    scheduledCount++;
                 }
             }
         }
      }
-
-     if (scheduledCount > 0) {
-        console.log(`${scheduledCount} adet namaz bildirimi planlandı.`);
-     }
   }, []);
-  // -------------------------------------------------------------
 
   useEffect(() => {
     const checkHolidayNotifications = () => {
@@ -334,7 +322,6 @@ const App: React.FC = () => {
         localStorage.setItem('offline_locationName', newLocationName);
         localStorage.setItem('offline_timestamp', Date.now().toString());
 
-        const todayStr = date.getDate().toString();
         const todayData = response.data.find((d: AladhanData) => {
             const dPart = d.date.gregorian.date.split('-')[0];
             return parseInt(dPart) === date.getDate();
@@ -479,17 +466,18 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f2eb] dark:bg-[#0c1218] text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 selection:bg-teal-500 selection:text-white relative overflow-hidden">
+    <div className="min-h-screen bg-[#f5f2eb] dark:bg-[#0c1218] text-gray-800 dark:text-gray-100 font-sans transition-colors duration-300 selection:bg-teal-500 selection:text-white relative overflow-hidden flex flex-col">
       
       <div className="fixed inset-0 z-0 bg-islamic-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-repeat"></div>
 
       {toastMessage && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[100] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
+        <div className="fixed bottom-40 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[120] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
             <svg className="w-5 h-5 text-emerald-400 dark:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
             {toastMessage}
         </div>
       )}
 
+      {/* Header - Only on Main Screen */}
       {!activeTool && (
         <header className="fixed top-0 left-0 right-0 z-50 pt-[env(safe-area-inset-top)] bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 backdrop-blur-md border-b border-amber-200/50 dark:border-slate-800 transition-all duration-300">
             <div className="h-16 px-4 max-w-screen-xl mx-auto flex items-center justify-between">
@@ -539,15 +527,16 @@ const App: React.FC = () => {
         </header>
       )}
 
-      <main className={`relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[120px] ${activeTool ? 'pt-0' : 'pt-[70px]'}`}>
+      {/* Main Scroll Content */}
+      <main className={`flex-1 relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[180px] ${activeTool ? 'hidden' : 'pt-[74px]'}`}>
         
-        {!activeTool && error && (
+        {error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
             <span className="block sm:inline">{error}</span>
           </div>
         )}
 
-        {!activeTool && upcomingAlerts.length > 0 && (
+        {upcomingAlerts.length > 0 && (
             <button 
                 onClick={() => setActiveTool('holidays')}
                 className="w-full relative overflow-hidden bg-gradient-to-r from-amber-500 to-orange-600 text-white p-3 rounded-xl shadow-lg shadow-orange-500/20 flex items-center justify-between group transition-transform hover:scale-[1.01]"
@@ -555,7 +544,7 @@ const App: React.FC = () => {
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/arabesque.png')] opacity-10"></div>
                 <div className="relative z-10 flex items-center gap-3">
                     <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                     </div>
                     <div className="text-left">
                         <div className="text-xs font-bold text-orange-100 uppercase tracking-wide">Yaklaşan Dini Gün</div>
@@ -569,42 +558,39 @@ const App: React.FC = () => {
             </button>
         )}
 
-        {!activeTool && <CountdownTimer nextPrayer={nextPrayer} onExpire={handleTimerExpire} />}
+        <CountdownTimer nextPrayer={nextPrayer} onExpire={handleTimerExpire} />
         
-        {!activeTool && (
-            <>
-                <DailyList 
-                    data={getCurrentDayData()} 
-                    currentPrayerName={nextPrayer && !nextPrayer.isTomorrow ? PRAYER_MAP[Object.keys(PRAYER_MAP).find(k => PRAYER_MAP[k] === nextPrayer.prayerName) || ''] : ''} 
-                />
-                <VerseCard verse={verse} />
-                <WeeklyList data={prayerData} />
-            </>
-        )}
+        <DailyList 
+            data={getCurrentDayData()} 
+            currentPrayerName={nextPrayer && !nextPrayer.isTomorrow ? PRAYER_MAP[Object.keys(PRAYER_MAP).find(k => PRAYER_MAP[k] === nextPrayer.prayerName) || ''] : ''} 
+        />
+        <VerseCard verse={verse} />
+        <WeeklyList data={prayerData} />
 
       </main>
 
-      <div className="fixed left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-300 bottom-[50px]">
-         <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01] mx-4 mb-2">
+      {/* Floating Bottom Navigation - ALWAYS VISIBLE - CRITICAL: Higher Z-index than Modal Overlay */}
+      <div className="fixed left-0 right-0 z-[130] flex justify-center pointer-events-none transition-all duration-300 bottom-[74px]">
+         <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.02] mx-4">
             <button 
-                onClick={() => setActiveTool(null)}
-                className={`flex flex-col items-center gap-1 ${activeTool === null ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
+                onClick={() => { setActiveTool(null); setIsMenuOpen(false); }}
+                className={`flex flex-col items-center gap-1 transition-colors ${activeTool === null && !isMenuOpen ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
             >
-                <svg className="w-6 h-6" fill={activeTool === null ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                <svg className="w-6 h-6" fill={activeTool === null && !isMenuOpen ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
                 <span className="text-[10px] font-bold">Ana Sayfa</span>
             </button>
 
             <button 
-                onClick={() => setActiveTool('quran')}
-                className={`flex flex-col items-center gap-1 ${activeTool === 'quran' ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
+                onClick={() => { setActiveTool('quran'); setIsMenuOpen(false); }}
+                className={`flex flex-col items-center gap-1 transition-colors ${activeTool === 'quran' ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
             >
                 <svg className="w-6 h-6" fill={activeTool === 'quran' ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                 <span className="text-[10px] font-bold">Kuran</span>
             </button>
 
             <button 
-                onClick={() => setIsMenuOpen(true)}
-                className="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className={`flex flex-col items-center gap-1 transition-colors ${isMenuOpen ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-teal-600 dark:hover:text-teal-400'}`}
             >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
                 <span className="text-[10px] font-bold">Araçlar</span>
@@ -612,8 +598,10 @@ const App: React.FC = () => {
          </nav>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 h-[50px] bg-black/10 dark:bg-white/5 backdrop-blur-sm border-t border-gray-200 dark:border-slate-700 flex items-center justify-center z-40 text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-none select-none">
-          REKLAM ALANI (BANNER)
+      {/* STICKY BOTTOM AD AREA - ALWAYS VISIBLE - Fixed at the very bottom */}
+      <div className="fixed bottom-0 left-0 right-0 h-[60px] bg-white dark:bg-[#0c1218] border-t border-gray-200 dark:border-slate-800 flex items-center justify-center z-[90] text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-auto select-none shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-200/50 to-transparent"></div>
+          REKLAM ALANI
       </div>
 
       <LocationModal 
@@ -625,6 +613,7 @@ const App: React.FC = () => {
         currentDistrict={selectedDistrict}
       />
 
+      {/* Menu Modal - Z-index [120] which is BELOW the Navbar [130] */}
       <MenuModal 
         isOpen={isMenuOpen} 
         onClose={() => setIsMenuOpen(false)} 
@@ -634,36 +623,35 @@ const App: React.FC = () => {
         }}
       />
 
-      {activeTool && activeTool !== 'quran' && (
-         <div className="fixed inset-0 z-40 bg-[#f5f2eb] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)]">
-            <div className="p-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-[#f5f2eb] dark:bg-[#0c1218]">
-                <button onClick={closeTool} className="flex items-center text-gray-600 dark:text-gray-300">
-                    <svg className="w-6 h-6 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
-                    Geri
-                </button>
-                <h2 className="font-bold text-lg text-gray-800 dark:text-white capitalize font-sans">
-                    {activeTool === 'qibla' && 'Kıble Pusulası'}
-                    {activeTool === 'holidays' && 'Dini Günler'}
-                    {activeTool === 'notifications' && 'Bildirim Ayarları'}
-                    {activeTool === 'dhikr' && 'Zikirmatik'}
-                    {activeTool === 'contact' && 'İletişim & Destek'}
-                </h2>
-                <div className="w-6"></div>
-            </div>
-            <div className="flex-1 overflow-hidden relative">
+      {/* Tool Container - Content Layer */}
+      {activeTool && (
+         <div className="fixed inset-0 z-[70] bg-[#f5f2eb] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)] pb-[160px]">
+            {activeTool !== 'quran' && (
+                <div className="p-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-[#f5f2eb] dark:bg-[#0c1218] shrink-0">
+                    <button onClick={closeTool} className="flex items-center text-gray-600 dark:text-gray-300">
+                        <svg className="w-6 h-6 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
+                        Geri
+                    </button>
+                    <h2 className="font-bold text-lg text-gray-800 dark:text-white capitalize font-sans">
+                        {activeTool === 'qibla' && 'Kıble Pusulası'}
+                        {activeTool === 'holidays' && 'Dini Günler'}
+                        {activeTool === 'notifications' && 'Bildirim Ayarları'}
+                        {activeTool === 'dhikr' && 'Zikirmatik'}
+                        {activeTool === 'contact' && 'İletişim & Destek'}
+                    </h2>
+                    <div className="w-6"></div>
+                </div>
+            )}
+            
+            <div className="flex-1 overflow-y-auto relative">
                 {activeTool === 'qibla' && coords && <QiblaCompass latitude={coords.lat} longitude={coords.lng} />}
                 {activeTool === 'holidays' && <HolidayCountdown />}
                 {activeTool === 'notifications' && <NotificationSettings />}
                 {activeTool === 'dhikr' && <Zikirmatik />}
                 {activeTool === 'contact' && <Contact />}
+                {activeTool === 'quran' && <QuranReader />}
             </div>
          </div>
-      )}
-
-      {activeTool === 'quran' && (
-          <div className="fixed inset-0 z-40 bg-[#fdfbf7] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)]">
-              <QuranReader />
-          </div>
       )}
 
     </div>
