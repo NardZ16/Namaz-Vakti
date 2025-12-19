@@ -26,9 +26,9 @@ const MenuModal: React.FC<MenuModalProps> = ({ isOpen, onClose, onSelectTool }) 
         onClick={onClose}
       ></div>
       
-      {/* Modal Content - Bottom Sheet Style - Raised mb to stay above lifted navbar */}
+      {/* Modal Content - Bottom Sheet Style - Positioned right above the new navbar top edge */}
       <div 
-        className={`w-full max-w-md bg-white dark:bg-[#1e293b] rounded-t-[2.5rem] p-6 shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-500 ease-out border-t border-amber-200/50 dark:border-slate-700 relative overflow-hidden mb-[160px] mx-4 ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        className={`w-full max-w-md bg-white dark:bg-[#1e293b] rounded-t-[2.5rem] p-6 shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-500 ease-out border-t border-amber-200/50 dark:border-slate-700 relative overflow-hidden mb-[150px] mx-4 ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
       >
         
         {/* Drag Handle Indicator */}
