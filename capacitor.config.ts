@@ -9,7 +9,9 @@ const config: CapacitorConfig = {
     androidScheme: 'https'
   },
   plugins: {
-    // AdMob removed
+    AdMob: {
+      // AdMob configuration if needed
+    }
   }
 };
 

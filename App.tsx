@@ -4,7 +4,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { fetchPrayerCalendar, fetchPrayerCalendarByCity, fetchCityCoordinates } from './services/aladhanService';
 import { fetchDailyVerse } from './services/geminiService';
 import { initNotifications, scheduleNotification, cancelAllNotifications, sendNotification, scheduleDailyVerseNotification } from './services/notificationService';
-import { initializeAds, showBottomBanner, isNative } from './services/nativeService';
+import { initializeAds, showBottomBannerWithListener, isNative, isAndroid } from './services/nativeService';
 import { getUpcomingHolidays } from './data/holidays';
 import CountdownTimer from './components/CountdownTimer';
 import DailyList from './components/DailyList';
@@ -18,6 +18,9 @@ import QiblaCompass from './components/QiblaCompass';
 import Zikirmatik from './components/Zikirmatik';
 import QuranReader from './components/QuranReader';
 import Contact from './components/Contact';
+import FeatureGraphicGenerator from './components/FeatureGraphicGenerator';
+import ScreenshotGenerator from './components/ScreenshotGenerator';
+import GoogleAd from './components/GoogleAd';
 import { AladhanData, NextPrayerInfo, VerseData, NotificationConfig, ReligiousHoliday } from './types';
 
 const PRAYER_MAP: Record<string, string> = {
@@ -51,6 +54,8 @@ const App: React.FC = () => {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [upcomingAlerts, setUpcomingAlerts] = useState<(ReligiousHoliday & { daysLeft: number })[]>([]);
 
+  const [isAdVisible, setIsAdVisible] = useState<boolean>(false);
+
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('theme') !== 'light';
   });
@@ -75,7 +80,9 @@ const App: React.FC = () => {
      if (isNative()) {
         initializeAds().then(() => {
             setTimeout(() => {
-                showBottomBanner();
+                showBottomBannerWithListener((loaded) => {
+                    setIsAdVisible(loaded);
+                });
             }, 1500);
         });
      }
@@ -471,17 +478,15 @@ const App: React.FC = () => {
       <div className="fixed inset-0 z-0 bg-islamic-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-repeat"></div>
 
       {toastMessage && (
-        <div className="fixed bottom-40 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[120] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-slate-200 text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl text-sm font-bold z-[250] animate-in slide-in-from-bottom-2 fade-in duration-300 flex items-center gap-2">
             <svg className="w-5 h-5 text-emerald-400 dark:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
             {toastMessage}
         </div>
       )}
 
-      {/* Header - Only on Main Screen */}
       {!activeTool && (
-        <header className="fixed top-0 left-0 right-0 z-50 pt-[env(safe-area-inset-top)] bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 backdrop-blur-md border-b border-amber-200/50 dark:border-slate-800 transition-all duration-300">
+        <header className={`fixed top-0 left-0 right-0 z-[160] ${isAndroid() ? 'pt-8' : 'pt-[env(safe-area-inset-top)]'} bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 backdrop-blur-md border-b border-amber-200/50 dark:border-slate-800 transition-all duration-300`}>
             <div className="h-16 px-4 max-w-screen-xl mx-auto flex items-center justify-between">
-                
                 <button 
                   onClick={() => setIsLocationModalOpen(true)}
                   className="flex flex-col items-start group"
@@ -527,9 +532,7 @@ const App: React.FC = () => {
         </header>
       )}
 
-      {/* Main Scroll Content - Increased pb for higher navbar */}
-      <main className={`flex-1 relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-[200px] ${activeTool ? 'hidden' : 'pt-[74px]'}`}>
-        
+      <main className={`flex-1 relative z-10 px-4 max-w-screen-xl mx-auto flex flex-col items-center gap-4 overflow-y-auto pb-28 ${activeTool ? 'hidden' : (isAndroid() ? 'pt-[106px]' : 'pt-[calc(env(safe-area-inset-top)+64px)]')}`}>
         {error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
             <span className="block sm:inline">{error}</span>
@@ -564,14 +567,17 @@ const App: React.FC = () => {
             data={getCurrentDayData()} 
             currentPrayerName={nextPrayer && !nextPrayer.isTomorrow ? PRAYER_MAP[Object.keys(PRAYER_MAP).find(k => PRAYER_MAP[k] === nextPrayer.prayerName) || ''] : ''} 
         />
+
+        <GoogleAd slotId="ca-app-pub-4319080566007267/7012382821" className="my-2" />
+
         <VerseCard verse={verse} />
         <WeeklyList data={prayerData} />
-
       </main>
 
-      {/* Floating Bottom Navigation - Positioned 85px from bottom as requested */}
-      <div className="fixed left-0 right-0 z-[130] flex justify-center pointer-events-none transition-all duration-300 bottom-[85px]">
-         <nav className="bg-white/95 dark:bg-[#1e293b]/95 backdrop-blur-xl border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.02] mx-4">
+      <div 
+        className={`fixed left-0 right-0 z-[210] flex flex-col items-center pointer-events-none transition-all duration-500 ${isAdVisible ? 'bottom-[60px]' : 'bottom-6'}`}
+      >
+         <nav className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-slate-800/40 rounded-3xl shadow-2xl w-full max-w-md px-2 py-3 flex items-center justify-around pointer-events-auto transform transition-all hover:scale-[1.01] mx-4">
             <button 
                 onClick={() => { setActiveTool(null); setIsMenuOpen(false); }}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTool === null && !isMenuOpen ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600'}`}
@@ -607,22 +613,21 @@ const App: React.FC = () => {
         currentDistrict={selectedDistrict}
       />
 
-      {/* Menu Modal - Adjusted mb to start from navbar top */}
       <MenuModal 
         isOpen={isMenuOpen} 
         onClose={() => setIsMenuOpen(false)} 
+        isAdVisible={isAdVisible}
         onSelectTool={(tool) => {
             setActiveTool(tool);
             setIsMenuOpen(false);
         }}
       />
 
-      {/* Tool Container - Content Layer */}
       {activeTool && (
-         <div className="fixed inset-0 z-[70] bg-[#f5f2eb] dark:bg-[#0c1218] flex flex-col animate-in slide-in-from-right duration-300 pt-[env(safe-area-inset-top)] pb-[160px]">
+         <div className={`fixed inset-0 z-[180] flex flex-col animate-in slide-in-from-bottom duration-500 bg-[#f5f2eb] dark:bg-[#0c1218]`}>
             {activeTool !== 'quran' && (
-                <div className="p-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-[#f5f2eb] dark:bg-[#0c1218] shrink-0">
-                    <button onClick={closeTool} className="flex items-center text-gray-600 dark:text-gray-300">
+                <div className={`shrink-0 z-[190] p-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 backdrop-blur-md ${isAndroid() ? 'pt-10' : 'pt-[calc(env(safe-area-inset-top)+10px)]'}`}>
+                    <button onClick={closeTool} className="flex items-center text-sm font-bold text-teal-700 dark:text-teal-400">
                         <svg className="w-6 h-6 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                         Geri
                     </button>
@@ -632,18 +637,22 @@ const App: React.FC = () => {
                         {activeTool === 'notifications' && 'Bildirim Ayarları'}
                         {activeTool === 'dhikr' && 'Zikirmatik'}
                         {activeTool === 'contact' && 'İletişim & Destek'}
+                        {activeTool === 'feature_gen' && 'Market Görseli'}
+                        {activeTool === 'screenshot_gen' && 'Tablet Görselleri'}
                     </h2>
-                    <div className="w-6"></div>
+                    <div className="w-10"></div>
                 </div>
             )}
             
-            <div className="flex-1 overflow-y-auto relative">
-                {activeTool === 'qibla' && coords && <QiblaCompass latitude={coords.lat} longitude={coords.lng} />}
-                {activeTool === 'holidays' && <HolidayCountdown />}
-                {activeTool === 'notifications' && <NotificationSettings />}
-                {activeTool === 'dhikr' && <Zikirmatik />}
-                {activeTool === 'contact' && <Contact />}
+            <div className={`flex-1 relative flex flex-col overflow-hidden`}>
+                {activeTool === 'qibla' && <div className="flex-1 overflow-y-auto pb-32"><QiblaCompass latitude={coords?.lat || 0} longitude={coords?.lng || 0} /></div>}
+                {activeTool === 'holidays' && <div className="flex-1 overflow-y-auto pb-32"><HolidayCountdown /></div>}
+                {activeTool === 'notifications' && <div className="flex-1 overflow-y-auto pb-32"><NotificationSettings /></div>}
+                {activeTool === 'dhikr' && <div className="flex-1 overflow-y-auto pb-32"><Zikirmatik /></div>}
+                {activeTool === 'contact' && <div className="flex-1 overflow-y-auto pb-32"><Contact onOpenGenerator={() => setActiveTool('feature_gen')} onOpenScreenshotGen={() => setActiveTool('screenshot_gen')} /></div>}
                 {activeTool === 'quran' && <QuranReader />}
+                {activeTool === 'feature_gen' && <div className="flex-1 overflow-y-auto pb-32"><FeatureGraphicGenerator /></div>}
+                {activeTool === 'screenshot_gen' && <div className="flex-1 overflow-y-auto pb-32"><ScreenshotGenerator /></div>}
             </div>
          </div>
       )}

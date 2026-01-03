@@ -1,19 +1,18 @@
 
 import React from 'react';
-import { isNative } from '../services/nativeService';
 
-const Contact: React.FC = () => {
+interface ContactProps {
+  onOpenGenerator?: () => void;
+  onOpenScreenshotGen?: () => void;
+}
+
+const Contact: React.FC<ContactProps> = ({ onOpenGenerator, onOpenScreenshotGen }) => {
   const handleEmail = () => {
     window.location.href = "mailto:mchtaydn18@gmail.com?subject=Namaz Vakti Pro Destek&body=Merhaba, uygulama hakkında bir sorum var:";
   };
 
   const handlePrivacy = () => {
     window.open('privacy.html', '_blank');
-  };
-
-  const checkAdsTxt = () => {
-    // Tarayıcıda yeni sekmede açar
-    window.open(window.location.origin + '/app-ads.txt', '_blank');
   };
 
   return (
@@ -47,7 +46,7 @@ const Contact: React.FC = () => {
                  </div>
                  <div className="flex-1">
                      <h3 className="font-bold text-gray-800 dark:text-white text-sm">Uygulama Sürümü</h3>
-                     <p className="text-xs text-gray-500 dark:text-gray-400">v1.3.1 (Build 2024)</p>
+                     <p className="text-xs text-gray-500 dark:text-gray-400">v1.3.2 (Build 2024)</p>
                  </div>
              </div>
 
@@ -64,28 +63,12 @@ const Contact: React.FC = () => {
                  </div>
                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
              </button>
-
-             {/* Sadece Web sürümünde görünür - Test Amaçlı */}
-             {!isNative() && (
-                 <button 
-                    onClick={checkAdsTxt}
-                    className="w-full bg-white dark:bg-slate-800 p-4 rounded-xl border border-gray-100 dark:border-slate-700 shadow-sm flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-left"
-                 >
-                     <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded-lg text-gray-600 dark:text-gray-300">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
-                     </div>
-                     <div className="flex-1">
-                         <h3 className="font-bold text-gray-800 dark:text-white text-sm">app-ads.txt Kontrol</h3>
-                         <p className="text-xs text-gray-500 dark:text-gray-400">Dosya erişimini test et</p>
-                     </div>
-                 </button>
-             )}
         </div>
 
         <div className="mt-8 text-center">
             <p className="text-xs text-gray-400 dark:text-gray-600 font-sans">
                 Namaz Vakti Pro<br/>
-                Made with ❤️ for Ummah
+                Hayırlı ve bereketli vakitler dileriz.
             </p>
         </div>
 

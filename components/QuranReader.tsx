@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { SURAH_LIST, SurahMeta } from '../data/surahList';
+import { isAndroid } from '../services/nativeService';
 
 interface Ayah {
   number: number; // Global number
@@ -55,16 +56,15 @@ const QuranReader: React.FC = () => {
     setContentError(null);
     setAyahs([]);
 
-    // AbortController ile zaman aşımı (timeout) ekliyoruz
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 saniye limit
+    const timeoutId = setTimeout(() => controller.abort(), 10000); 
 
     try {
         const res = await fetch(`https://api.alquran.cloud/v1/surah/${selectedSurah.number}/editions/quran-simple,tr.diyanet`, {
             signal: controller.signal
         });
         
-        clearTimeout(timeoutId); // İşlem başarılıysa zamanlayıcıyı temizle
+        clearTimeout(timeoutId); 
 
         if (!res.ok) throw new Error("Sunucu hatası");
 
@@ -77,7 +77,6 @@ const QuranReader: React.FC = () => {
             const mergedAyahs = arabicData.map((ayah: any, index: number) => {
                 let text = ayah.text;
                 
-                // Clean Bismillah from the first verse of Surahs (except Fatiha and Tawbah)
                 if (selectedSurah.number !== 1 && selectedSurah.number !== 9 && index === 0) {
                     text = text.replace(/^بِسْمِ\s+[ٱا]llāh\s+[ٱا]l-?raḥmān\s+[ٱا]l-?raḥīm\s*/i, "").trim(); 
                     text = text.replace(/^بِسْمِ\s+[ٱا]للَّهِ\s+[ٱا]لرَّحْمَٰنِ\s+[ٱا]لرَّحِيمِ\s*/, "").trim();
@@ -227,9 +226,9 @@ const QuranReader: React.FC = () => {
   // Surah List View
   if (!selectedSurah) {
     return (
-        <div className="h-full flex flex-col bg-[#fdfbf7] dark:bg-slate-900">
+        <div className="h-full flex flex-col bg-[#f5f2eb] dark:bg-[#0c1218]">
             {/* Search Header */}
-            <div className="p-4 border-b border-amber-100 dark:border-slate-700 bg-[#fdfbf7] dark:bg-slate-800 sticky top-0 z-10 space-y-3">
+            <div className={`p-4 border-b border-amber-100 dark:border-slate-800 bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 sticky top-0 z-10 space-y-3 ${isAndroid() ? 'pt-10' : 'pt-[calc(env(safe-area-inset-top)+10px)]'}`}>
                 
                 {bookmark && (
                     <button 
@@ -257,7 +256,7 @@ const QuranReader: React.FC = () => {
                     <input
                         type="text"
                         placeholder="Sure ara (Örn: Fatiha, Yasin)..."
-                        className="w-full p-3 pl-10 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white placeholder-gray-500 font-sans"
+                        className="w-full p-3 pl-10 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white placeholder-gray-500 font-sans"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -265,13 +264,13 @@ const QuranReader: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 pb-40">
+            <div className="flex-1 overflow-y-auto p-2 pb-32">
                 <div className="grid grid-cols-1 gap-1">
                     {filteredSurahs.map(surah => (
                         <button
                             key={surah.number}
                             onClick={() => setSelectedSurah(surah)}
-                            className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border-b border-gray-50 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-slate-700/50 transition-colors group rounded-lg mb-1 shadow-sm"
+                            className="flex items-center justify-between p-4 bg-white dark:bg-slate-800/50 border-b border-gray-50 dark:border-slate-700/50 hover:bg-amber-50 dark:hover:bg-slate-700 transition-colors group rounded-lg mb-1 shadow-sm"
                         >
                             <div className="flex items-center gap-4">
                                 <div className="w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-slate-700 rounded-lg font-bold text-emerald-700 dark:text-emerald-400 text-xs font-sans">
@@ -299,10 +298,10 @@ const QuranReader: React.FC = () => {
 
   // Surah Reading View
   return (
-    <div className="h-full flex flex-col bg-[#fdfbf7] dark:bg-slate-950 relative">
+    <div className="h-full flex flex-col bg-[#f5f2eb] dark:bg-[#0c1218] relative">
         <audio ref={audioRef} className="hidden" />
 
-        <div className="bg-[#fdfbf7]/95 dark:bg-slate-900/95 border-b border-amber-200/50 dark:border-slate-800 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
+        <div className={`bg-[#f5f2eb]/95 dark:bg-[#0c1218]/95 border-b border-amber-200/50 dark:border-slate-800 backdrop-blur-sm sticky top-0 z-20 shadow-sm ${isAndroid() ? 'pt-10' : 'pt-[calc(env(safe-area-inset-top)+10px)]'}`}>
              <div className="flex items-center justify-between px-4 py-3">
                 <button onClick={handleBack} className="flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-emerald-600 transition-colors bg-white border border-gray-100 dark:border-slate-700 dark:bg-slate-800 py-1.5 px-3 rounded-lg font-sans">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
@@ -336,7 +335,7 @@ const QuranReader: React.FC = () => {
              )}
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-40 scroll-smooth bg-[#fdfbf7] dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto pb-32 scroll-smooth">
             {contentLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 space-y-4">
                     <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>
@@ -376,7 +375,7 @@ const QuranReader: React.FC = () => {
                                     ref={(el) => { ayahRefs.current[index] = el; }}
                                     className={`
                                         py-3 px-3 rounded-lg relative transition-colors duration-200 
-                                        ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'hover:bg-amber-50/50 dark:hover:bg-slate-900'}
+                                        ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'hover:bg-amber-50/50 dark:hover:bg-slate-900/40'}
                                         ${isBookmarked ? 'bg-amber-50 dark:bg-amber-900/10' : ''}
                                     `}
                                 >

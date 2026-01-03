@@ -155,20 +155,22 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
   const userRugRotation = ((smoothHeading - qiblaAngle) + 360) % 360;
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-slate-900 relative overflow-hidden">
+    <div className="h-full flex flex-col items-center justify-center p-4 pb-24 bg-[#f5f2eb] dark:bg-[#0c1218] relative overflow-hidden">
       
-      <div 
-        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-700 pointer-events-none ${isAligned ? 'opacity-100' : 'opacity-0'}`}
-      >
-         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1537562649149-9f44e6e5e64e?q=80&w=1920&auto=format&fit=crop')] bg-cover bg-center opacity-60"></div>
-         <div className="relative z-10 flex flex-col items-center animate-pulse">
-            <div className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.8)] mb-6 border-4 border-white">
-                 <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-            </div>
-            <h1 className="text-4xl font-black text-white tracking-wider drop-shadow-lg text-center">KIBLE<br/>BULUNDU</h1>
-            <p className="text-emerald-300 mt-2 font-medium tracking-widest text-sm border-t border-emerald-500/50 pt-2">ALLAH KABUL ETSİN</p>
-         </div>
-      </div>
+      {isAligned && (
+        <div 
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-700 animate-in fade-in"
+        >
+           <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1537562649149-9f44e6e5e64e?q=80&w=1920&auto=format&fit=crop')] bg-cover bg-center opacity-60"></div>
+           <div className="relative z-10 flex flex-col items-center animate-pulse">
+              <div className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.8)] mb-6 border-4 border-white">
+                   <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <h1 className="text-4xl font-black text-white tracking-wider drop-shadow-lg text-center">KIBLE<br/>BULUNDU</h1>
+              <p className="text-emerald-300 mt-2 font-medium tracking-widest text-sm border-t border-emerald-500/50 pt-2">ALLAH KABUL ETSİN</p>
+           </div>
+        </div>
+      )}
 
       <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-8 absolute top-4 left-4 z-10">Kıble Pusulası</h2>
 
@@ -187,7 +189,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
           </button>
         </div>
       ) : (
-        <>
+        <div className="flex flex-col items-center">
           <div className="relative w-80 h-[30rem] z-10 flex items-center justify-center">
             {/* Fixed Background Rug (Target) */}
             <div className="absolute w-52 h-[22rem] text-gray-400 dark:text-slate-700 flex flex-col items-center justify-center">
@@ -220,7 +222,7 @@ const QiblaCompass: React.FC<QiblaCompassProps> = ({ latitude, longitude }) => {
                Derece: {((360 - userRugRotation) % 360).toFixed(0)}°
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

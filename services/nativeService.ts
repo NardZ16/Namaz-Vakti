@@ -1,9 +1,13 @@
 
 import { Capacitor } from '@capacitor/core';
-import { AdMob, BannerAdSize, BannerAdPosition, AdmobConsentStatus } from '@capacitor-community/admob';
+import { AdMob, BannerAdSize, BannerAdPosition, AdmobConsentStatus, BannerAdPluginEvents, AdLoadInfo } from '@capacitor-community/admob';
 
 export const isNative = (): boolean => {
   return Capacitor.isNativePlatform();
+};
+
+export const isAndroid = (): boolean => {
+  return Capacitor.getPlatform() === 'android';
 };
 
 export const triggerHaptic = async (pattern: 'light' | 'medium' | 'heavy' | 'success' | 'warning') => {
@@ -23,7 +27,6 @@ export const triggerHaptic = async (pattern: 'light' | 'medium' | 'heavy' | 'suc
         console.warn("Native Haptics failed or not loaded", e);
     }
   } else {
-    // Web Fallback: Tarayıcı titreşim desteği
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
         switch (pattern) {
             case 'light': navigator.vibrate(10); break;
@@ -39,10 +42,7 @@ export const triggerHaptic = async (pattern: 'light' | 'medium' | 'heavy' | 'suc
 };
 
 export const initializeAds = async () => {
-    if (!isNative()) {
-        console.log("ℹ️ Web ortamında AdMob devre dışı bırakıldı.");
-        return;
-    }
+    if (!isNative()) return;
 
     try {
         await AdMob.initialize({
@@ -50,22 +50,34 @@ export const initializeAds = async () => {
         });
 
         const consentInfo = await AdMob.requestConsentInfo();
-        
         if (consentInfo.status === AdmobConsentStatus.REQUIRED) {
             await AdMob.showConsentForm();
         }
-
     } catch (e) {
         console.warn("AdMob initialization warning:", e);
     }
 };
 
-export const showBottomBanner = async () => {
+/**
+ * Banner reklamı gösterir ve yüklenme durumuna göre geri bildirim verir
+ * @param onLoaded Reklam başarıyla yüklendiğinde çalışacak callback
+ */
+export const showBottomBannerWithListener = async (onLoaded: (isLoaded: boolean) => void) => {
     if (!isNative()) return;
 
     try {
-        // Pozisyonu BOTTOM_CENTER olarak sabitledik ve margin'i 0 yaptık.
-        // Bu, reklamın sistem navigasyon çubuğunun hemen üzerine yapışmasını sağlar.
+        // Reklam yüklendiğinde
+        AdMob.addListener(BannerAdPluginEvents.Loaded, (info: AdLoadInfo) => {
+            console.log("Banner Loaded", info);
+            onLoaded(true);
+        });
+
+        // Reklam yüklenemediğinde veya kapatıldığında
+        AdMob.addListener(BannerAdPluginEvents.FailedToLoad, (error) => {
+            console.error("Banner Failed", error);
+            onLoaded(false);
+        });
+
         const options = {
             adId: 'ca-app-pub-4319080566007267/3273590664', 
             adSize: BannerAdSize.ADAPTIVE_BANNER,
@@ -77,6 +89,7 @@ export const showBottomBanner = async () => {
         await AdMob.showBanner(options);
     } catch (e) {
         console.error("Show banner failed", e);
+        onLoaded(false);
     }
 };
 
